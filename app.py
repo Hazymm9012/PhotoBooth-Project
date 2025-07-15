@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, session
 import cv2 
 from tkinter import *
 from PIL import Image, ImageTk
@@ -6,6 +6,7 @@ import os
 import time 
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'fallback_insecure_key')
 PHOTO_DIR = 'static/photos'
 
 # Home Page
@@ -23,6 +24,14 @@ def preview():
 @app.route('/choose_size')
 def choose_size():
     return render_template('chooseSize.html')
+
+# Set print size of the photo
+@app.route('/set_size', methods=['POST'])
+def set_size():
+    selected_size = request.form.get('size')
+    session['photo_size'] = selected_size
+    print(f"Selected frame: {selected_size}")
+    return redirect(url_for('preview'))
 
 # Capture Photo 
 @app.route('/capture', methods=['POST'])
