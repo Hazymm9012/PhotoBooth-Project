@@ -26,3 +26,13 @@ document.addEventListener("DOMContentLoaded", function() {
     });
 
 });
+
+document.querySelectorAll(".frame-button").forEach(button => {
+    button.addEventListener("click", function() {
+        // Uncheck all buttons
+        document.querySelectorAll(".frame-button").forEach(b => b.classList.remove("checked"));
+
+        // Check clicked button
+        this.classList.add("checked");
+    })
+});

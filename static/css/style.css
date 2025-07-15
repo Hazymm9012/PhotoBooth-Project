@@ -37,6 +37,33 @@ h1 {
   transform: scale(1.05);
 }
 
+.container-button {
+  justify-content: center;
+}
+
+.frame-button {
+  font-size: 3.5em;
+  color: white;
+  font-family: "Chewy", system-ui;
+  font-weight: 500;
+  padding: 20px 40px;
+  margin: 20px;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+  border-radius: 4em;
+  background-color: #f9d342;
+  transition: background-color 0.3s ease, transform 0.3s ease;
+  cursor: pointer;
+}
+
+.frame-button:hover {
+  background-color: #f9d342;
+  transform: scale(1.05);
+}
+
+.frame-button:active {
+  background-color: #f9b702;
+}
+
 
 image-preview
 {
