@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Welcome | Photo Booth{% endblock %}
+
+{% block content %}
+    <div class="container">
+        <video id="video" autoplay></video>
+    </div>        
+    <div class="container">
+        <button id="startButton">Start Camera</button>
+        <button id="stopButton">Stop Camera</button>
+    </div>
+
+{% endblock %}

@@ -1,0 +1,44 @@
+body {
+  margin: 0;
+  background-image: url("/static/images/Home-background.jpg");
+  background-size: cover;
+  color: black;
+  font-family: sans-serif;
+  text-align: center;
+  display: flex;
+  flex-direction: column; 
+  justify-content: center;
+  height: 100vh;
+  padding: 20px;
+}
+
+h1 {
+  font-family: "Chewy", system-ui;
+  font-weight: 500;
+  font-style: normal;
+  font-size: 3em;
+  color: whitesmoke;
+  text-shadow: 3px 3px 4px rgba(0, 0, 0, 0.5);
+}
+
+.tapToStart {
+  font-size: 4em;
+  color: white;
+  padding: 20px 40px;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+  border-radius: 4em;
+  background-color: #f9d342;
+  transition: background-color 0.3s ease, transform 0.3s ease;
+  cursor: pointer;
+}
+
+.tapToStart:hover {
+  background-color: #f9c42f;
+  transform: scale(1.05);
+}
+
+
+image-preview
+{
+  display: none;
+}
