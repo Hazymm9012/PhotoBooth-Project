@@ -1,12 +1,14 @@
 document.addEventListener("DOMContentLoaded", function() {
     const video = document.getElementById('video');
     const retakeButton = document.getElementById('retakeButton');
-    //const stopButton = document.getElementById('stopButton');
+    const stopButton = document.getElementById('stopButton');
     const countdownEl = document.getElementById("countdown");
     const photo = document.getElementById("photo");
     const canvas = document.getElementById("canvas");
     const uploadButton = document.getElementById('uploadButton');
-
+    const startButton = document.getElementById('startButton');
+    const loadingButton = document.getElementById('loadingButton');
+    
     // Camera will not turn on if the video element is not present
     if (!video) return;
 
@@ -28,6 +30,7 @@ document.addEventListener("DOMContentLoaded", function() {
         document.getElementById("photo").style.display = "none";
         retakeButton.style.display = "none";
         captureButton.style.display = "inline-block";
+        uploadButton.style.display = "none";
 
         // Request access to the user's camera
         navigator.mediaDevices.getUserMedia({ video: true })
@@ -39,7 +42,20 @@ document.addEventListener("DOMContentLoaded", function() {
             });
     });
 
-    `stopButton.addEventListener('click', function() {
+    startButton.addEventListener('click', function() {
+        console.log("Starting camera...");
+        // Request access to the user's camera
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                video.srcObject = stream;
+            })
+            .catch(error => {
+                console.error('Error accessing the camera: ', error);
+            });
+        });
+    
+
+    stopButton.addEventListener('click', function() {
         console.log("Stopping camera...");
         // Stop all video tracks
         if (video.srcObject) {
@@ -47,13 +63,22 @@ document.addEventListener("DOMContentLoaded", function() {
             tracks.forEach(track => track.stop());
             video.srcObject = null;
         }
-    });`
+    });
+
+    loadingButton.addEventListener('click', function() {
+        showLoading();
+        console.log("Loading screen shown...");
+        setTimeout(() => {
+            console.log("Hiding loading screen...");
+            hideLoading();
+        }, 5000); // Hide loading after 5 seconds
+    })
+
     uploadButton.addEventListener('click', function() {
         console.log("Uploading image...");
+        showLoading();
         const imageData = canvas.toDataURL("image/jpeg");
         console.log("Image data:", imageData);
-
-        console.log("Clearing canvas...");
 
         // Send the image data to the server
         fetch('/upload', {
@@ -71,13 +96,21 @@ document.addEventListener("DOMContentLoaded", function() {
             
         })
         .catch(error => {
+            alert('Error uploading image. Please try again.');
             console.error('Error uploading image:', error);
             }
-        );
+        ).finally(() => {
+            hideLoading();  
+        })
     });
         
 
     captureButton.addEventListener('click', function() {
+        // Check if camera is turn on
+        if (!video.srcObject) {
+            alert("Please turn on the camera first.");
+            return;
+        }
         let count = 5;
 
         const countdownInterval = setInterval(() => {
@@ -144,3 +177,15 @@ document.querySelectorAll(".frame-button").forEach(button => {
         this.classList.add("checked");
     })
 });
+
+function showLoading() {
+    document.getElementById("loading-element").style.display = "block";
+    document.getElementById("loading-text").style.display = "block";
+    document.getElementById("blur-overlay").style.display = "block";
+}
+
+function hideLoading() {
+    document.getElementById("loading-element").style.display = "none";
+    document.getElementById("loading-text").style.display = "none";
+    document.getElementById("blur-overlay").style.display = "none";
+}
