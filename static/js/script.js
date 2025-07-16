@@ -5,6 +5,7 @@ document.addEventListener("DOMContentLoaded", function() {
     const countdownEl = document.getElementById("countdown");
     const photo = document.getElementById("photo");
     const canvas = document.getElementById("canvas");
+    const uploadButton = document.getElementById('uploadButton');
 
     // Camera will not turn on if the video element is not present
     if (!video) return;
@@ -47,6 +48,34 @@ document.addEventListener("DOMContentLoaded", function() {
             video.srcObject = null;
         }
     });`
+    uploadButton.addEventListener('click', function() {
+        console.log("Uploading image...");
+        const imageData = canvas.toDataURL("image/jpeg");
+        console.log("Image data:", imageData);
+
+        console.log("Clearing canvas...");
+
+        // Send the image data to the server
+        fetch('/upload', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ image: imageData }),
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Image uploaded successfully:', data);
+            photo.src = data.image_url; 
+            photo.style.display = "block";
+            
+        })
+        .catch(error => {
+            console.error('Error uploading image:', error);
+            }
+        );
+    });
+        
 
     captureButton.addEventListener('click', function() {
         let count = 5;
@@ -70,7 +99,27 @@ document.addEventListener("DOMContentLoaded", function() {
               photo.src = canvas.toDataURL("image/jpeg");
               photo.style.display = "block";
               retakeButton.style.display = "inline-block";
+              uploadButton.style.display = "inline-block";
               captureButton.style.display = "none";
+
+              // Save the image to the server
+              fetch('/save_image', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    image: JSON.stringify({ image: canvas.toDataURL("image/jpeg") })
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    console.log('Image saved successfully:', data);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+              
 
             // Stop the video stream
             if (video.srcObject) {
