@@ -5,6 +5,9 @@
 {% block content %}
     <body id="photo-preview">
     <div id="blur-overlay"></div>
+    <div id="photo-settings"
+     data-photo-width="{{ photo_width }}"
+     data-photo-height="{{ photo_height }}"></div>
     <div id="page-content">
         <div class="container">
             <div class="container-image">
@@ -21,6 +24,7 @@
             <button id="stopButton"> Stop Camera - DEBUG ONLY</button> 
             <button id="startButton"> Start Camera - DEBUG ONLY</button> 
             <button id="loadingButton">Loading button - DEBUG ONLY</button>
+            <button id="saveButton" style="display: none">Save Photo - DEBUG ONLY</button>
             <div id="loading-text" class="loading-text" style="display: none">Please Wait ...</div>
             <div id="loading-element" class="loading-element" style="display: none"></div>
         </div>

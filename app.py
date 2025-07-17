@@ -2,6 +2,8 @@ from flask import Flask, render_template, request, redirect, url_for, session, j
 from together import Together
 from tkinter import *
 from PIL import Image, ImageTk
+from io import BytesIO
+from utils import read_image_from_base64, read_image_from_folder, pil_to_base64, stitch_images
 
 import os
 import time
@@ -23,7 +25,10 @@ def index():
 # Preview page
 @app.route('/preview')
 def preview():
-    return render_template('preview.html')
+    photo_width = session.get('image_width')
+    photo_height = session.get('image_height')
+    print(f"Retrieved values: width {photo_width}, height {photo_height}")
+    return render_template('preview.html', photo_width=photo_width, photo_height=photo_height)
 
 # Choose print size for photo
 @app.route('/choose_size')
@@ -33,9 +38,20 @@ def choose_size():
 # Set print size of the photo
 @app.route('/set_size', methods=['POST'])
 def set_size():
+    image_width = 0
+    image_height = 0
     selected_size = request.form.get('size')
     session['photo_size'] = selected_size
+    if selected_size == "frame1":
+        image_width = 832
+        image_height = 1184
+    elif selected_size == "frame2":
+        image_width = 1664
+        image_height = 1184
+    session['image_width'] = image_width
+    session['image_height'] = image_height
     print(f"Selected frame: {selected_size}")
+    print(f"Selected weight & height: {image_width} px & {image_height} px")
     return redirect(url_for('preview'))
 
 # Upload and generate pixar-style photo
@@ -47,16 +63,21 @@ def upload():
             print("❌ No image data provided.")
             return "No image data provided", 400
         
-        image_data = data['image']
+        background_image_data = read_image_from_folder(data.get("background_filename"))
+        decoded_image_data = read_image_from_base64(data.get("image"))
+        processed_image = stitch_images(decoded_image_data, background_image_data)
+        base64_image = pil_to_base64(processed_image)
         
-        # image_data_uri = load_image_as_data_uri(image_data)
+        # Retrieve current session requested photo width and height
+        photo_width = session.get('image_width')
+        photo_height = session.get('image_height')
         
         response = client.images.generate(
             model = "black-forest-labs/FLUX.1-kontext-dev",
-            width = 1024,
-            height = 768,
-            prompt = "A Pixar-style 3D animated [man/woman/child] with [specific traits], large shiny eyes, cute facial proportions, soft lighting, digital painting in Pixar style.",
-            image_url = image_data,
+            width = photo_width,
+            height = photo_height,
+            prompt = "Change this image into a pixar-style image. Change all the background into pixar-style at the disney castle",
+            image_url = data.get("image"),
         )
         
         #if not response or not response.get('image_url'):
@@ -78,10 +99,16 @@ def upload():
 def save_image():
     try:
         data = request.get_json()
-        if 'image' not in data:
-            return "No image data provided", 400
+        image_data = data.get('image')
         
-        header, base64_image = data['image'].split(',', 1)
+        if not image_data:
+            return jsonify({'error': 'No Image Provided'}, 400)
+        
+        try:
+            header, base64_image = image_data.split(',', 1)
+        except ValueError:
+            return jsonify({'error': 'Invalid base64 image format'}), 400
+        
         if not os.path.exists(PHOTO_DIR):
             os.makedirs(PHOTO_DIR)
         
@@ -104,16 +131,6 @@ def save_image():
 def show_photo(filename):
     return render_template('photo.html', filename=filename)
 
-# Load image from file and convert to data URI
-def load_image_as_data_uri(image_path):
-    try:
-        with open(image_path, "rb") as file:
-            encoded = base64.b64encode(file.read()).decode("utf-8")
-            return f"data:image/jpeg;base64,{encoded}"
-    except FileNotFoundError:
-        raise Exception("Image file not found.")
-    except Exception as e:
-        raise Exception(f"Failed to read/encode image: {e}")
 
 if __name__ == '__main__':
     app.run(debug=True)
