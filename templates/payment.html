@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Welcome | Photo Booth{% endblock %}
+
+{% block content %}
+<div class="container-payment-summary">
+    <div id="blur-overlay"></div>
+    <h1><strong>Payment Summary</strong></h1>
+    <div class="container-payment">
+        <h3><strong>Photo Frame: {{ frame_data }} </strong></h3>
+        <h3><strong>Price: RM {{ price }} </strong></h3>
+        <button id="payButton" class="frame-button">Pay Now</button>
+        <a class="exit-button" id="exitButton">
+            <i class="fa fa-sign-out"></i>
+        </a>
+        <a onClick="history.back()" class="back-button">
+            <i class="fas fa-arrow-left"></i> Back
+        </a>
+        <div id="loading-text" class="loading-text" style="display: none">Please Wait ...</div>
+        <div id="loading-element" class="loading-element" style="display: none"></div>
+    </div>
+</div>
+
+{% endblock %}

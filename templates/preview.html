@@ -3,31 +3,43 @@
 {% block title %}Welcome | Photo Booth{% endblock %}
 
 {% block content %}
+    <script src="https://sandbox.hit-pay.com/hitpay.js"></script>
+    <script src="{{ url_for('static', filename='js/hitpay.js') }}" defer></script>
     <body id="photo-preview">
     <div id="blur-overlay"></div>
     <div id="photo-settings"
      data-photo-width="{{ photo_width }}"
      data-photo-height="{{ photo_height }}"></div>
     <div id="page-content">
-        <div class="container">
+        <div class="container-wrapper">
             <div class="container-image">
-                <video id="video" autoplay></video>
-                <div id="countdown" class="hidden">5</div>
-                <img id="photo" class="image-frame" style="display: none"/>
+                <video id="video" oncontextmenu="return false;" autoplay></video>
+                <img id="photo" class="image-frame" style="display: none" oncontextmenu="return false;"/>
                 <canvas id="canvas" style="display: none"></canvas>
+                <div id="countdown" class="countdown">5</div>
+            </div>
+            <div class="container-button">
+                <a class="exit-button" id="exitButton">
+                    <i class="fa fa-sign-out"></i>
+                </a>
+                <a onClick="history.back()" class="back-button">
+                    <i class="fas fa-arrow-left"></i> Back
+                </a>
+                <button id="retakeButton" class="frame-button" style="display: none">Retake</button>
+                <button id="captureButton" class="frame-button">Capture</button>
+                <audio id="beep-sound" src="/static/audio/timer_countdown_5_secs.mp3" preload="auto"></audio>
+                <button id="paymentButton"class="frame-button" style="display: none" >Pay Now</button>
+                <button id="uploadButton" style="display: none">Apply AI Filter - DEBUG ONLY</button>
+                <button id="stopButton" style="display: none"> Stop Camera - DEBUG ONLY</button> 
+                <button id="startButton" style="display: none"> Start Camera - DEBUG ONLY</button> 
+                <!--<button id="loadingButton">Loading button - DEBUG ONLY</button>-->
+                <!--<button id="saveButton" style="display: none">Save Photo - DEBUG ONLY</button>-->
+                <button id="countdownButton" style="display: none">Start Countdown - DEBUG ONLY</button>
+                <!--<button onClick="onClickPay()">Show Drop-In</button>-->
+                <!--<button id="generateQRCode">Generate QR Code - DEBUG ONLY</button>-->
+                <div id="loading-text" class="loading-text" style="display: none">Please Wait ...</div>
+                <div id="loading-element" class="loading-element" style="display: none"></div>
             </div>
         </div>        
-        <div class="container-button">
-            <button id="retakeButton" class="frame-button" style="display: none">Retake</button>
-            <button id="captureButton" class="frame-button">Capture</button>
-            <button id="uploadButton" style="display: none">Apply AI Filter - DEBUG ONLY</button>
-            <button id="stopButton"> Stop Camera - DEBUG ONLY</button> 
-            <button id="startButton"> Start Camera - DEBUG ONLY</button> 
-            <button id="loadingButton">Loading button - DEBUG ONLY</button>
-            <button id="saveButton" style="display: none">Save Photo - DEBUG ONLY</button>
-            <div id="loading-text" class="loading-text" style="display: none">Please Wait ...</div>
-            <div id="loading-element" class="loading-element" style="display: none"></div>
-        </div>
     </div>
-
 {% endblock %}
