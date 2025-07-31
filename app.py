@@ -5,10 +5,11 @@ from tkinter import *
 from PIL import Image, ImageTk
 from io import BytesIO
 from utils import  encode_image, is_valid_base64, encode_image_to_data_url, get_local_ip, verify_hitpay_signature, clear_session
-from payment_status_store import load_status_store, save_status, get_status
+from payment_status_store import load_status_store, save_status, get_status, get_last_item_from_store
 from openai import OpenAI
 from itsdangerous import URLSafeTimedSerializer
 from datetime import datetime, timedelta, UTC
+from dotenv import load_dotenv
 
 import os
 import time
@@ -16,20 +17,49 @@ import base64
 import requests
 import qrcode
 import jwt
+import secrets
 
-# Ensure the OpenAI, Hitpay salt is set up in environment variables
+# Load environment variables from .env file
+load_dotenv() 
+
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'fallback_insecure_key')
+app.config['SERVER_NAME'] = None
+app.config['SESSION_COOKIE_SECURE'] = True
+
+# Ensure app, openai, hitpay salt and api keys are set up in .env
+app.secret_key = os.environ.get('SECRET_KEY')
 client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
 HITPAY_SALT = os.environ.get('HITPAY_SALT')
+HITPAY_API_KEY = os.environ.get('HITPAY_API_KEY')
+ALLOWED_IPS = ['202.168.65.122', '127.0.0.1']
+
+# Constants and global variables
 PHOTO_DIR = 'static/photos'
 payment_status_store = {}
 load_status_store()
-serializer = URLSafeTimedSerializer(app.secret_key)
+
+# Check session ID and create a new one if it doesn't exist
+@app.before_request
+def ensure_session_id():
+    if 'session_id' not in session:
+        session['session_id'] = str(uuid.uuid4())  
+        session['is_new_session'] = True
+        print("New session created with ID:", session['session_id'])
+    else:
+        session['is_new_session'] = False
+
+# Check if the request is from an allowed IP address.
+# During development, use local IP address to the ALLOWED_IPS list.        
+@app.before_request
+def limit_remote_address():
+    client_ip = request.remote_addr
+    if client_ip not in ALLOWED_IPS:
+        print(f"Access denied for IP: {client_ip}")
+        abort(403)
 
 # Generate secure link for the image file
 def get_secure_image_url(filename):
-    # Create payload with image path and expiration 
+    # Create payload with image path and expiration time 
     payload = {
         "image_path": f"{filename}",
         "exp": datetime.now(UTC) + timedelta(minutes=10)  # expires in 10 mins
@@ -79,7 +109,8 @@ def preview():
     photo_width = session.get('image_width')
     photo_height = session.get('image_height')
     print(f"Retrieved values: width {photo_width}, height {photo_height}")
-    return render_template('preview.html', photo_width=photo_width, photo_height=photo_height)
+    img_ratio = photo_width / photo_height
+    return render_template('preview.html', photo_width=photo_width, photo_height=photo_height, session_id=session['session_id'], img_ratio=img_ratio)
 
 # Choose print size for photo
 @app.route('/choose_size')
@@ -236,10 +267,12 @@ def exit_app():
 @app.route('/fail')
 def fail():
     status = request.args.get("status")
-    payment_id = request.args.get("payment_id")
+    
+    # Get the payment ID from the request or session
+    payment_id = request.args.get("payment_request_id") or session.get("payment_request_id") # or get_last_item_from_store()
     print(f"Status: '{status}'")        # Debug
     print(f"Payment ID: '{payment_id}'")  # Debug
-    if status not in ['canceled', 'failed'] or not payment_id:
+    if status not in ['canceled', 'failed', 'unknown'] or not payment_id:
         abort(403)
     print("Payment failed!")
     return render_template('fail.html')
@@ -248,8 +281,10 @@ def fail():
 @app.route('/payment', methods=['POST'])
 def payment():
     data = request.get_json()
-    print("Received data for payment:", data)  # Debug
+    # print("Received data for payment:", data)  # Debug
     # session['photo_src'] = data.get('photo_src')
+    
+    # Save the image data to a file
     save_image()
     return redirect(url_for('payment_summary'))
 
@@ -268,9 +303,18 @@ def payment_summary():
         
     # Store the frame data and price in the session    
     session['frame_data'] = frame_data
-    session['price'] = price    
+    session['price'] = price 
+    photo_width = session.get('image_width')
+    photo_height = session.get('image_height')
+    photo_filename = session.get('image_filename_with_url') 
     
-    return render_template('payment.html', frame_data=frame_data, price=price, selected_size=selected_size)
+    if photo_width is None or photo_height is None or photo_filename is None:
+        print("❌ Missing photo dimensions or filename in session.")
+        abort(404)
+        
+    print(f"Photo width: {photo_width}, height: {photo_height}, filename: {photo_filename}")  # Debug
+    
+    return render_template('payment.html', frame_data=frame_data, price=price, selected_size=selected_size, photo_width=photo_width, photo_height=photo_height, photo_filename=photo_filename) 
     
 
 # Send request to Hitpay API 
@@ -287,22 +331,22 @@ def create_payment_request():
     
     reference_id = str(uuid.uuid4())
     url = "https://api.sandbox.hit-pay.com/v1/payment-requests"
-    redirect_url = "https://fun-pony-engaging.ngrok-free.app/redirect"
-    API_KEY = os.environ.get('HITPAY_API_KEY')
+    redirect_url = "https://urchin-modest-instantly.ngrok-free.app/redirect"
     
     headers = {
-        "X-BUSINESS-API-KEY": API_KEY,
+        "X-BUSINESS-API-KEY": HITPAY_API_KEY,
         "X-Requested-With": "XMLHttpRequest",
         "Content-Type": "application/x-www-form-urlencoded"
     }
     
     payload = {
-        "amount": str(price),                           # Example amount for testing, adjust as needed
-        "currency": "SGD",                              # For testing, use SGD. Other currencies not supported in sandbox
-        "purpose": frame_data + " frame photo",         # Description of the payment
-        "redirect_url": redirect_url, 
-        "webhook_url": "https://fun-pony-engaging.ngrok-free.app/payment-confirmation/webhook",
-        "reference": reference_id, 
+        "amount": str(price),                                                                       # Example amount for testing, adjust as needed
+        "currency": "SGD",                                                                          # For testing, use SGD. Other currencies not supported in sandbox
+        "purpose": frame_data + " frame photo",                                                     # Description of the payment
+        "redirect_url": redirect_url,                                                               # Redirect URL after payment
+        "webhook": "https://urchin-modest-instantly.ngrok-free.app/payment-confirmation/webhook",   # Webhook URL for payment confirmation
+        "reference": reference_id,
+        "send_email": True                                                                          # Send email notification
     }
 
     response = requests.post(url, headers=headers, data=payload, timeout=10) 
@@ -316,34 +360,30 @@ def create_payment_request():
             "message": "Failed to create payment",
             "error_detail": response.text
         }), response.status_code
-        
-# Download image into URL 
-#@app.route('/download_image')
-#def download_image():
-#    image_path = session.get('image_filename')
-#    if os.path.exists(image_path):
-#        return send_file(image_path, as_attachment=True)
-#    return "Image not found", 404
              
 # Generate QR code after payment for the image
 @app.route('/success')
 def success():
-    
     # Check if the payment was successful
     status = request.args.get("status")
-    payment_id = request.args.get("payment_id")
+    payment_id = request.args.get("payment_request_id")
     print(f"Status: '{status}'")        # Debug
-    print(f"Payment ID: '{payment_id}'")  # Debug
+    print(f"Payment Request ID: '{payment_id}'")  # Debug
     
     # Check if the payment status is valid
-    if status not in ['completed'] or not payment_id:
+    if status not in ['succeeded'] or not payment_id:
         abort(403)   # Forbidden
         
     # Check that the payment_id exists in session or database
-    valid_payment_id = session.get('payment_id')  # Example
-
+    valid_payment_id = get_last_item_from_store()  # Example
     if not payment_id or payment_id != valid_payment_id:
         abort(403)  # Forbidden
+           
+    stored_status = get_status(payment_id)  # Check if the payment ID exists in the store
+    
+    if not stored_status or stored_status.get("status") != 'succeeded':
+        print(f"Payment ID {payment_id} not found or not succeeded.")
+        return redirect(url_for('fail', status='failed', payment_request_id=payment_id))
         
     image_filename_with_url = session.get('image_filename_with_url')
     image_filename = session.get('image_filename')
@@ -374,6 +414,14 @@ def success():
 @app.route('/pay', methods=['POST'])
 def pay():
     try:
+        # Create a unique payment token
+        payment_token = secrets.token_urlsafe(16)
+        
+        # Store the payment token and data from before into the server
+        session['payment_token'] = payment_token
+        session['original_session'] = session.copy() # Store the original session data
+        print(f"Payment token created: {payment_token}")
+        
         # Create a payment request and redirect to the payment URL
         payment_request = create_payment_request()
         
@@ -383,7 +431,7 @@ def pay():
         
         if payment_url:
             # Return payment url
-            return jsonify({"redirect_url": payment_url})
+            return jsonify({"redirect_url": payment_url, "payment_token": payment_token}), 200
         else:
             return jsonify({"error": "Failed to create payment request"}), 400
         
@@ -405,17 +453,34 @@ def webhook():
     # Check if the event type and object are valid
     if not signature:
         return jsonify({"error": "No signature provided"}), 400
-    
+ 
     # Verify the Hitpay signature
     if not verify_hitpay_signature(test_data, signature, HITPAY_SALT):
         print("❌ Invalid signature")
-        return jsonify({"error": "Invalid signature"}), 400
+        payment_id = request.json.get('id')
+        payment_request_id = request.json.get('payment_request_id')
+        payment_status_store[payment_request_id] = {
+                "payment_id": payment_id,
+                "status": "failed",
+                "timestamp": datetime.now().isoformat()
+        }
+        save_status(payment_request_id, payment_id, 'failed')
+        session[payment_request_id] = payment_request_id
+        return jsonify({"status": "failed", "message": "Invalid Signature"}), 400
+    
+    # Extract payment ID and status from the payload
+    payload = request.get_json()
     
     # Process the webhook event
-    payload = request.get_json()
     print(f"Received event {event_type} on object {event_obj}: {payload}")
     
+    # Check if the payload is empty
+    if not payload:
+        print("❌ No payload received")
+        return jsonify({"error": "No payload received"}), 400
+    
     payment_id = payload.get('id')
+    payment_request_id = payload.get('payment_request_id')
     status = payload.get('status')
     
     # Check the payment status
@@ -426,25 +491,66 @@ def webhook():
         if status == 'succeeded':
             print("Payment successful!")
             print(f"Stored payment {payment_id} = {status}")
-            payment_status_store[payment_id] = status
-            save_status(payment_id, 'succeeded')
+            payment_status_store[payment_request_id] = {
+                "payment_id": payment_id,
+                "status": status,
+                "timestamp": datetime.now().isoformat()
+            }
+            save_status(payment_request_id=payment_request_id, payment_id=payment_id, status='succeeded')
             return jsonify({"status": "success", "message": "Payment successful"}), 200
         else:
             print("Payment failed or pending.")
             return jsonify({"status": "failed", "message": "Payment failed or pending"}), 400
+        
+# Retrieve payment status
+# Check from the store if the payment ID exists
+@app.route('/payment-status', methods=['GET'])
+def payment_status():
+    payment_request_id = request.args.get('payment_request_id')
+    
+    if not payment_request_id:
+        return jsonify({"error": "Payment ID is required"}), 400
+    
+    # Check if the payment ID exists in the store
+    record = payment_status_store.get(payment_request_id)
+    status = None
+    if record:
+        status = record.get('status')
+
+    if status:
+        return jsonify({"payment_request_id": payment_request_id, "status": status}), 200
+    else:
+        return jsonify({"payment_request_id": payment_request_id, "status": "pending"}), 404    
 
 # Redirect user either success page or failed page
 @app.route('/redirect', methods=['GET'])
 def redirect_user():
-    payment_id = request.args.get('reference')
-    payment_status = payment_status_store.get(payment_id)
+    payment_request_id = request.args.get('reference')
+    status_param = request.args.get('status')
     
-    # Store payment id to check later for verification
-    session['payment_id'] = payment_id
+    if 'payment_token' not in session:
+        return "Invalid session token", 400
+    
+    original_data = session.get('original_session', {})
+    session.update(original_data)  # Restore original session
+    session.pop('payment_token', None)
+    session.pop('original_session', None)
+    
+    # DEBUG: Test data from original session
+    print("session data: ", session.get('session_id'))
+    print("Current selected frame: " + session.get('frame_data'))
+    
+    # Store payment request ID. This will be used to save the payment status
+    if status_param == 'canceled': 
+        save_status(payment_request_id=payment_request_id, payment_id='None', status='canceled')
     
     print(request.args.to_dict())
-    return render_template('redirect.html', payment_id=payment_id, payment_status=payment_status)
+    return render_template('redirect.html', payment_request_id=payment_request_id, payment_status=status_param)
 
+# Testing page
+@app.route('/test')
+def test():
+    return render_template('test.html')
 
 if __name__ == '__main__':
     app.run(debug=True)
