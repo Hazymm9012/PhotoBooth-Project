@@ -1,4 +1,18 @@
 document.documentElement.requestFullscreen();
+selectedTimer = null; // Initialize selected timer
+
+function setTimer(timer) {
+    selectedTimer = timer;
+    console.log("Selected timer:", selectedTimer);
+    const timerDropdown = document.getElementById('timerDropdown');
+    timerDropdown.classList.add('hidden');
+}
+
+// Function to toggle the dropdown visibility
+function toggleTimerDropdown() {
+    const timerDropdown = document.getElementById('timerDropdown');
+    timerDropdown.classList.toggle('hidden');
+}
 
 // Show loading screen
 function showLoading(text) {
@@ -97,14 +111,27 @@ function previewPageButtons(photoWidth, photoHeight) {
     
     if (captureButton) {
         captureButton.addEventListener('click', function() {
+            const previewButtonsContainer = document.getElementById("container-button-bottom")
             console.log("Capture button clicked...");
             // Check if camera is turn on
             if (!video.srcObject) {
                 showAlertMessage("Camera is not turned on. Please turn on the camera first.");
                 return;
             }
-            let count = 5;
-    
+            previewButtonsContainer.classList.toggle("hiddenFade");
+            setTimeout(() => {
+                previewButtonsContainer.style.display = "none";
+            }, 500); // must match the transition duration (800ms)
+            
+            // Initialize countdown
+            let count = 0  
+            
+            if (selectedTimer == null) {  
+                count = 5;              // Default to 5 seconds if no timer is selected  
+            } else {
+                count = selectedTimer // Use the selected timer value
+            }
+            
             const countdownInterval = setInterval(() => {
                 countdownEl.textContent = count;
                 countdownEl.classList.remove("fade-in-out"); // reset animation
@@ -118,10 +145,14 @@ function previewPageButtons(photoWidth, photoHeight) {
                 captureButton.disabled = true;
                 timerButton.disabled = true;
 
-    
                 if (count === 0) {
                   clearInterval(countdownInterval);
                   countdownEl.classList.add("hidden");
+                  previewButtonsContainer.style.display = "flex"; 
+
+                  // Force reflow to ensure transition triggers
+                  void previewButtonsContainer.offsetWidth;
+                  previewButtonsContainer.classList.toggle("hiddenFade");
                   beepSound.pause() 
                   beepSound.currentTime = 0;   // reset sound
 
@@ -191,6 +222,9 @@ function previewPageButtons(photoWidth, photoHeight) {
         uploadButton.addEventListener('click', function() {
             console.log("Uploading image...");
             showLoading("Generating image, please wait...");
+            setTimeout( function() {
+                document.getElementById("loading-text").textContent = "This might take a while, please wait...";
+            }, 15000)
             const imageData = canvas.toDataURL("image/png");
     
             console.log("Image data:", imageData);
@@ -218,7 +252,6 @@ function previewPageButtons(photoWidth, photoHeight) {
                 console.error('Error uploading image:', error);
                 }
             ).finally(() => {
-                showSuccessMessage("Image Generated", "Your image has been generated successfully!");
                 hideLoading();  
             })
         });
@@ -352,7 +385,6 @@ document.addEventListener("DOMContentLoaded", function() {
     const exitButton = document.getElementById('exitButton');
     console.log("Path:", window.location.pathname);
       
-    
     // Exit button needs to load first.
     if (exitButton) {
         exitButton.addEventListener("click", (e) => {
@@ -369,6 +401,7 @@ document.addEventListener("DOMContentLoaded", function() {
         // Get the video element
         const width = window.innerWidth;
         const height = window.innerHeight;
+        document.getElementById('timerButton').addEventListener('click', toggleTimerDropdown);
         
         // DEBUG: Viewport size
         console.log(`Viewport size: ${width}x${height}`);

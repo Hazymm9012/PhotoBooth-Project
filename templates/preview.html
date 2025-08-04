@@ -29,7 +29,7 @@
                 <canvas id="canvas" style="display: none"></canvas>
                 <audio id="beep-sound" src="/static/audio/timer_countdown_5_secs.mp3" preload="auto"></audio>
             </div>
-            <div class="container-button-bottom">
+            <div class="container-button-bottom" id="container-button-bottom">
                 <button class="frame-button" id="paymentButton" style="display: none">
                     <i class="fas fa-shopping-cart"></i>
                 </button>
@@ -42,9 +42,17 @@
                 <button class="frame-button" id="uploadButton" style="display: none">
                     <i class="fas fa-filter"></i>
                 </button>
-                <button class="frame-button" id="timerButton">
-                    <i class="fa-solid fa-clock"></i>
-                </button>
+                <div class="dropdown-container" id="dropdown-container">
+                    <button class="frame-button" id="timerButton">
+                        <i class="fa-solid fa-clock"></i>
+                    </button>
+                    <div id="timerDropdown" class="dropdown hidden">
+                        <button onclick="setTimer(0)">⏱ Timer Off</button>
+                        <button onclick="setTimer(3)">⏱ 3 seconds</button>
+                        <button onclick="setTimer(5)">⏱ 5 seconds</button>
+                        <button onclick="setTimer(10)">⏱ 10 seconds</button>
+                    </div>
+                </div>
                 <button id="stopButton" style="display: none"> Stop Camera - DEBUG ONLY</button> 
                 <button id="startButton" style="display: none"> Start Camera - DEBUG ONLY</button> 
                 <button id="loadingButton" style="display: none">Loading button - DEBUG ONLY</button>

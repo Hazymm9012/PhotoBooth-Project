@@ -2,7 +2,7 @@ import uuid
 from flask import Flask, abort, render_template, request, redirect, url_for, session, jsonify, send_file
 from together import Together
 from tkinter import *
-from PIL import Image, ImageTk
+from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 from utils import  encode_image, is_valid_base64, encode_image_to_data_url, get_local_ip, verify_hitpay_signature, clear_session
 from payment_status_store import load_status_store, save_status, get_status, get_last_item_from_store
@@ -35,6 +35,7 @@ ALLOWED_IPS = ['202.168.65.122', '127.0.0.1']
 
 # Constants and global variables
 PHOTO_DIR = 'static/photos'
+PREVIEW_DIR = 'static/previews'
 payment_status_store = {}
 load_status_store()
 
@@ -108,6 +109,11 @@ def index():
 def preview():
     photo_width = session.get('image_width')
     photo_height = session.get('image_height')
+    
+    # Check if the width and height of the preview camera are available
+    if photo_height is None or photo_height is None:
+        return "Photo width and Photo height are required", 403
+    
     print(f"Retrieved values: width {photo_width}, height {photo_height}")
     img_ratio = photo_width / photo_height
     return render_template('preview.html', photo_width=photo_width, photo_height=photo_height, session_id=session['session_id'], img_ratio=img_ratio)
@@ -236,17 +242,35 @@ def save_image():
         
         if not os.path.exists(PHOTO_DIR):
             os.makedirs(PHOTO_DIR)
+            
+        if not os.path.exists(PREVIEW_DIR): 
+            os.makedirs(PREVIEW_DIR)
         
+        image_data = base64.b64decode(base64_image)
         timestamp = time.strftime("%Y%m%d-%H%M%S")
-        filename = f"{PHOTO_DIR}/photo_{timestamp}.png"
+        hd_filename = f"{PHOTO_DIR}/photo_{timestamp}.png"
+        preview_filename = f"{PREVIEW_DIR}/photo_{timestamp}.jpeg"
         
-        with open (filename, "wb") as file:
-            file.write(base64.b64decode(base64_image))
+        with open (hd_filename, "wb") as file:
+            file.write(image_data)
+            
+        with open(preview_filename, "wb") as file:
+            file.write(image_data)
         
-        print(f"Photo captured and saved as {filename}")
+        print(f"HD Photo captured and saved as {hd_filename}")
+        print(f"Preview Photo captured and saved as {preview_filename}")
+        
+        preview_image = Image.open(preview_filename)
+        draw = ImageDraw.Draw(preview_image)
+        watermark_text = "PREVIEW ONLY"
+        font = ImageFont.load_default(45)
+        colour = (255, 255, 255)
+        
+        draw.text((10, 10), watermark_text, fill=colour, font=font)
+        preview_image.save(preview_filename, "JPEG")
         
         # Store the filename in the session for later use
-        session['image_filename_with_url'] = f"photos/photo_{timestamp}.png"
+        session['image_filename_with_url'] = f"previews/photo_{timestamp}.jpeg" # This is solely for preview purposes
         session['image_filename'] = f"photo_{timestamp}.png"
         
         return jsonify({"image_filename": f"photo_{timestamp}.png"}), 200
