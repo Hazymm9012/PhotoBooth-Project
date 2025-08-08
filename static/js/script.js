@@ -1,11 +1,22 @@
 document.documentElement.requestFullscreen();
 selectedTimer = null; // Initialize selected timer
 
-function setTimer(timer) {
+//  
+function setTimer(timer, element) {
+    // Change the selected timer
     selectedTimer = timer;
     console.log("Selected timer:", selectedTimer);
-    const timerDropdown = document.getElementById('timerDropdown');
-    timerDropdown.classList.add('hidden');
+
+    // Remove 'selected' from all menu items
+    document.querySelectorAll('.menu-item').forEach(item => {
+        item.classList.remove('selected');
+    });
+
+    // Add 'selected' to the clicked one
+    const clickedItem = event.target.closest('.menu-item');
+    if (clickedItem) {
+        clickedItem.classList.add('selected');
+    }
 }
 
 // Function to toggle the dropdown visibility
@@ -107,7 +118,8 @@ function previewPageButtons(photoWidth, photoHeight) {
     const countdownEl = document.getElementById("countdown");
     const photo = document.getElementById("photo");
     const canvas = document.getElementById("canvas");
-    const timerButton = document.getElementById("timerButton");
+    const timerContainerButtons = document.getElementById("timer-container-buttons");
+    //const timerButton = document.getElementById("timerButton");
     
     if (captureButton) {
         captureButton.addEventListener('click', function() {
@@ -129,7 +141,7 @@ function previewPageButtons(photoWidth, photoHeight) {
             if (selectedTimer == null) {  
                 count = 5;              // Default to 5 seconds if no timer is selected  
             } else {
-                count = selectedTimer // Use the selected timer value
+                count = selectedTimer  // Use the selected timer value
             }
             
             const countdownInterval = setInterval(() => {
@@ -143,7 +155,7 @@ function previewPageButtons(photoWidth, photoHeight) {
                 countdownEl.classList.add("scale");
                 countdownButton.disabled = true;
                 captureButton.disabled = true;
-                timerButton.disabled = true;
+                //timerButton.disabled = true;
 
                 if (count === 0) {
                   clearInterval(countdownInterval);
@@ -170,8 +182,10 @@ function previewPageButtons(photoWidth, photoHeight) {
                   uploadButton.style.display = "inline-block";
                   captureButton.style.display = "none";
                   paymentButton.style.display = "inline-block";
-                  timerButton.style.display = "none";
-                  //document.getElementById("uploadButton").click();
+                  timerContainerButtons.style.display = "none";
+                    //timerButton.style.display = "none";
+                  // timerButton.style.display = "none";
+                  document.getElementById("uploadButton").click();
                   //payButton.style.display = "inline-block";
                   //saveButton.style.display = "inline-block"
     
@@ -189,13 +203,14 @@ function previewPageButtons(photoWidth, photoHeight) {
     }
 
     // Change timer for the coundown timer
-    if (timerButton) {
+    `if (timerButton) {
         timerButton.addEventListener('click', function() {
             console.log("Changing timer...");
 
         })
-    }
+    }`
 
+    // Retake button functionality
     if (retakeButton) {
         retakeButton.addEventListener('click', function() {
             console.log("Starting camera...");
@@ -204,13 +219,16 @@ function previewPageButtons(photoWidth, photoHeight) {
             document.getElementById("photo").src = "";
             document.getElementById("photo").style.display = "none";
             document.getElementById("video").style.display = "block";
+
+            // Reset buttons
             retakeButton.style.display = "none";
             captureButton.style.display = "inline-block";
             paymentButton.style.display = "none"
             captureButton.disabled = false;
             uploadButton.style.display = "none";
-            timerButton.style.display = "inline-block";
-            timerButton.disabled = false;
+            timerContainerButtons.style.display = "inline-block";
+            //timerButton.style.display = "inline-block";
+            //timerButton.disabled = false;
             //saveButton.style.display = "none";
     
             // Request access to the user's camera
@@ -218,6 +236,7 @@ function previewPageButtons(photoWidth, photoHeight) {
         });
     }
 
+    // Upload button functionality
     if (uploadButton) {
         uploadButton.addEventListener('click', function() {
             console.log("Uploading image...");
@@ -230,7 +249,7 @@ function previewPageButtons(photoWidth, photoHeight) {
             console.log("Image data:", imageData);
     
             // Send the image data to the server
-            fetch('/upload', {
+            const uploadPromise = fetch('/upload', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -238,21 +257,31 @@ function previewPageButtons(photoWidth, photoHeight) {
                 body: JSON.stringify({ 
                     image: imageData,
                     background_filename: "Terengganu_Drawbridge.png" 
-                }),
-            })
+                })
+            });
+
+            // Handle timeout for the upload request
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Request timed out')), 90000) // 90 seconds timeout
+            );
+
+            Promise.race([uploadPromise, timeoutPromise])
             .then(response => response.json())
             .then(data => {
                 console.log('Image uploaded successfully:', data);
                 photo.src = data.image_url; 
                 photo.style.display = "block";
-                
             })
             .catch(error => {
-                showAlertMessage("Failed to upload image. Please try again.");
+                showAlertMessage("Failed to upload image. Please try again.\nError: " + error.message);
                 console.error('Error uploading image:', error);
                 }
             ).finally(() => {
-                hideLoading();  
+                document.getElementById("loading-text").textContent = "Showing your image...";
+                setTimeout(() => {
+                    hideLoading();  
+                }, 1500); // Hide loading after 1.5 seconds
+                    
             })
         });
     }
@@ -274,7 +303,6 @@ function previewPageButtons(photoWidth, photoHeight) {
                 if (res.redirected) {
                   window.location.href = res.url; // ✅ Go to /payment page
                 } else {
-                  // Optional: handle JSON if backend returns JSON
                   return res.json();
                 }
               }).catch(err => {
@@ -384,6 +412,39 @@ document.addEventListener("DOMContentLoaded", function() {
     const path = window.location.pathname;
     const exitButton = document.getElementById('exitButton');
     console.log("Path:", window.location.pathname);
+
+    const toggleButtons = document.querySelectorAll('.timer-toggle-btn');
+    const menuLists = document.querySelectorAll('.menu-list');
+    const menuItems = document.querySelectorAll('.menu-item');
+
+    toggleButtons.forEach(btn => {
+        btn.addEventListener('click', function () {
+            const captureButton = document.getElementById("captureButton")
+            btn.classList.toggle("effect");
+
+            if (btn.classList.contains("effect")) {
+                captureButton.disabled = true;
+            } else {
+                captureButton.disabled = false;
+            }
+            menuLists.forEach(menu => {
+                menu.classList.toggle("effect");
+            });
+        });
+    });
+
+    menuItems.forEach(item => {
+        item.addEventListener('click', function () {
+            menuLists.forEach(menu => {
+                menu.classList.remove("effect");
+            });
+            toggleButtons.forEach(btn => {
+                btn.classList.remove("effect");
+            });
+            document.getElementById("captureButton").disabled = false;
+        }
+        );
+    });
       
     // Exit button needs to load first.
     if (exitButton) {
@@ -401,7 +462,7 @@ document.addEventListener("DOMContentLoaded", function() {
         // Get the video element
         const width = window.innerWidth;
         const height = window.innerHeight;
-        document.getElementById('timerButton').addEventListener('click', toggleTimerDropdown);
+        // document.getElementById('timerButton').addEventListener('click', toggleTimerDropdown);
         
         // DEBUG: Viewport size
         console.log(`Viewport size: ${width}x${height}`);
@@ -426,7 +487,7 @@ document.addEventListener("DOMContentLoaded", function() {
             }, 500);
         }
         
-        // This needs to be in preview if statement
+        // This needs to be in "preview if" statement
         if (path === "/payment-summary"){
             //const photoFilename = {{ photo_filename }};
             window.onload = function() {

@@ -18,25 +18,31 @@ import requests
 import qrcode
 import jwt
 import secrets
+import socket
 
 # Load environment variables from .env file
 load_dotenv() 
 
+# Initialize Flask app and configure settings
 app = Flask(__name__)
 app.config['SERVER_NAME'] = None
 app.config['SESSION_COOKIE_SECURE'] = True
 
 # Ensure app, openai, hitpay salt and api keys are set up in .env
 app.secret_key = os.environ.get('SECRET_KEY')
-client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
+client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'), timeout=80)  
 HITPAY_SALT = os.environ.get('HITPAY_SALT')
 HITPAY_API_KEY = os.environ.get('HITPAY_API_KEY')
-ALLOWED_IPS = ['202.168.65.122', '127.0.0.1']
+ALLOWED_IPS = ['202.168.65.122']
 
 # Constants and global variables
 PHOTO_DIR = 'static/photos'
 PREVIEW_DIR = 'static/previews'
+
+# Initialize the payment status store
 payment_status_store = {}
+
+# Load the payment status store from file
 load_status_store()
 
 # Check session ID and create a new one if it doesn't exist
@@ -53,14 +59,32 @@ def ensure_session_id():
 # During development, use local IP address to the ALLOWED_IPS list.        
 @app.before_request
 def limit_remote_address():
+    """Check if the request is from an allowed IP address."""
     client_ip = request.remote_addr
     if client_ip not in ALLOWED_IPS:
         print(f"Access denied for IP: {client_ip}")
-        abort(403)
+        return render_template('403.html'), 403
+        
+@app.errorhandler(403)
+def forbidden_error(error):
+    """Handle 403 Forbidden errors by rendering the 403 error page."""
+    return render_template('403.html'), 403
+
+@app.errorhandler(404)
+def not_found_error(error):
+    """Handle 404 errors by rendering the 404 error page."""
+    return render_template('404.html'), 404
 
 # Generate secure link for the image file
 def get_secure_image_url(filename):
-    # Create payload with image path and expiration time 
+    """Generate a secure link for the image file using JWT token.
+
+    Args:
+        filename (str): The name of the image file.
+
+    Returns:
+        str: A secure link to access the image file.
+    """
     payload = {
         "image_path": f"{filename}",
         "exp": datetime.now(UTC) + timedelta(minutes=10)  # expires in 10 mins
@@ -77,6 +101,11 @@ def get_secure_image_url(filename):
 # View secure image
 @app.route('/view-secure-image')
 def view_secure_image():
+    """View a secure image using a JWT token.
+
+    Returns:
+        Response: The image file if the token is valid, otherwise an error message.
+    """
     token = request.args.get('token')
     if not token:
         return "Invalid or missing token", 400
@@ -102,11 +131,17 @@ def view_secure_image():
 # Home Page
 @app.route('/')
 def index():
-    return render_template('index.html')
+    """Render the home page."""
+    return render_template('index.html', index=True)
 
 # Preview page
 @app.route('/preview')
 def preview():
+    """Render the preview page with the photo width and height.
+
+    Returns:
+        str: Rendered HTML template for the preview page.
+    """
     photo_width = session.get('image_width')
     photo_height = session.get('image_height')
     
@@ -116,17 +151,26 @@ def preview():
     
     print(f"Retrieved values: width {photo_width}, height {photo_height}")
     img_ratio = photo_width / photo_height
-    return render_template('preview.html', photo_width=photo_width, photo_height=photo_height, session_id=session['session_id'], img_ratio=img_ratio)
+    return render_template('preview.html', photo_width=photo_width, photo_height=photo_height, session_id=session['session_id'], img_ratio=img_ratio, index=False)
 
 # Choose print size for photo
 @app.route('/choose_size')
 def choose_size():
-    return render_template('chooseSize.html')
+    """Render the choose size page for the photo.
+
+    Returns:
+        str: Rendered HTML template for the choose size page.
+    """
+    return render_template('chooseSize.html', index=False)
 
 # Set print size of the photo
 @app.route('/set_size', methods=['POST'])
 def set_size():
-    
+    """Set the size of the photo based on user selection.
+
+    Returns:
+        Response: Redirects to the preview page after setting the size.
+    """
     # Get the selected size from the form
     image_width = 0
     image_height = 0
@@ -152,21 +196,30 @@ def set_size():
     
     return redirect(url_for('preview'))
 
-# Upload and generate pixar-style photo
 @app.route('/upload', methods=['POST'])
 def upload():
+    """Upload an image and generate a pixar-style photo using the ChatGPT/Together API.
+    
+    Returns:
+        Response: JSON response containing the generated image URL or an error message.
+    """
     try:
+        # Request data from the client
         data = request.get_json()
+        
+        # Check if the data contains the image and background filename
         if not data or 'image' not in data:
             print("❌ No image data provided.")
             return "No image data provided", 400
         
+        # Encode the image and background image to base64 (Format supported by ChatGPT API)
         encoded_background_image = encode_image(os.path.join("static/images/", data.get("background_filename")))
         encoded_image = encode_image_to_data_url(data.get("image"))
         
         # Retrieve current session requested photo width and height
         photo_size = session.get('photo_size')
         
+        # Together API client initialization
         #response = client.images.generate(
         #    model = "black-forest-labs/FLUX.1-kontext-dev",
         #    width = photo_width,
@@ -175,6 +228,7 @@ def upload():
         #    image_url = data.get("image"),
         #)
         
+        # Set the prompt text for the image generation
         prompt_text = "Change the style of this image into a 3D pixar-style image. Use the second image as the background image for the first image. Make it look cartoonish."
         
         # Call ChatGPT API to generate the image
@@ -202,8 +256,7 @@ def upload():
                 }],
         )
         
-        #if not response or not response.get('image_url'):
-        #    raise Exception("Failed to generate image.")
+        # DEBUG: Print the response from the API
         print("Image has been successfully generated.")
         
         # Extract the image URL
@@ -216,18 +269,29 @@ def upload():
             return jsonify({"image_url": image_url})
         else:
             return jsonify({"error": "No image generated"}), 400
+    except requests.exceptions.Timeout:
+        return jsonify({"error": "The request to OpenAI timeout"}), 503
     
-    except requests.exceptions.RequestException as re:
-        print(f"❌ Network error: {re}")
-        
+    except requests.exceptions.ConnectionError:
+        print(f"❌ Network error")
+        return jsonify({"error": "Network Connection Error"}),  503
+    
+    except socket.timeout:
+        return jsonify({"error": "Socket Timeout"}), 504
+    
     except Exception as e:
         print(f"❌ API Error: {e}")
-    
-    return None    
+        return jsonify({"error": str(e)}), 500
+      
     
 # Capture Photo 
 @app.route('/save_image', methods=['POST'])
 def save_image():
+    """Save the captured image from the request to the server.
+
+    Returns:
+        Response: JSON response with the filename of the saved image or an error message.
+    """
     try:
         data = request.get_json()
         image_data = data.get('image')
@@ -247,7 +311,7 @@ def save_image():
             os.makedirs(PREVIEW_DIR)
         
         image_data = base64.b64decode(base64_image)
-        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        timestamp = time.strftime("%d%m%Y-%H%M%S")
         hd_filename = f"{PHOTO_DIR}/photo_{timestamp}.png"
         preview_filename = f"{PREVIEW_DIR}/photo_{timestamp}.jpeg"
         
@@ -283,6 +347,11 @@ def save_image():
 # Exit function
 @app.route('/exit')
 def exit_app():
+    """Exit the application and clear session data.
+
+    Returns:
+        Response: Redirects to the index page after clearing session data.
+    """
     clear_session()
     print("Exiting the application and clearing session data..")
     return redirect(url_for('index'))
@@ -290,6 +359,11 @@ def exit_app():
 # Failure function
 @app.route('/fail')
 def fail():
+    """Handle payment failure by rendering the fail page.
+
+    Returns:
+        Response: Rendered HTML template for the fail page.
+    """
     status = request.args.get("status")
     
     # Get the payment ID from the request or session
@@ -299,24 +373,32 @@ def fail():
     if status not in ['canceled', 'failed', 'unknown'] or not payment_id:
         abort(403)
     print("Payment failed!")
-    return render_template('fail.html')
+    return render_template('fail.html', index=False)
 
 # View payment page
 @app.route('/payment', methods=['POST'])
 def payment():
-    data = request.get_json()
-    # print("Received data for payment:", data)  # Debug
-    # session['photo_src'] = data.get('photo_src')
-    
-    # Save the image data to a file
+    """View payment page and save the image.
+
+    Returns:
+        Response: Redirects to the payment summary page after saving the image.
+    """
     save_image()
     return redirect(url_for('payment_summary'))
 
 # View payment summary
 @app.route('/payment-summary')
 def payment_summary():
+    """View the payment summary page with frame data and price.
+
+    Returns:
+        Response: Rendered HTML template for the payment summary page.
+    """
     frame_data = ""
     price = ""
+    if 'session' not in globals() or 'photo_size' not in session:
+        print("❌ No photo size selected in session.")
+        abort(404)
     selected_size = session.get('photo_size')
     if selected_size == "frame1":
         frame_data = "7 cm x 10 cm"
@@ -338,13 +420,15 @@ def payment_summary():
         
     print(f"Photo width: {photo_width}, height: {photo_height}, filename: {photo_filename}")  # Debug
     
-    return render_template('payment.html', frame_data=frame_data, price=price, selected_size=selected_size, photo_width=photo_width, photo_height=photo_height, photo_filename=photo_filename) 
+    return render_template('payment.html', frame_data=frame_data, price=price, selected_size=selected_size, photo_width=photo_width, photo_height=photo_height, photo_filename=photo_filename, index=False) 
     
-
-# Send request to Hitpay API 
-# API key needs to be set in the environment variables
 @app.route('/create-payment-request')
 def create_payment_request():
+    """Create a payment request using the Hitpay API.
+
+    Returns:
+        Response: JSON response containing payment data or an error message.
+    """
     frame_data = session.get('frame_data')
     if not frame_data:
         return jsonify({"error": "Frame data not found in session"}), 400
@@ -385,9 +469,14 @@ def create_payment_request():
             "error_detail": response.text
         }), response.status_code
              
-# Generate QR code after payment for the image
 @app.route('/success')
 def success():
+    """Render the success page after a successful payment and generate QR code with link to the saved image.
+
+    Returns:
+        Response: Rendered HTML template for the success page with QR code.
+    """
+    
     # Check if the payment was successful
     status = request.args.get("status")
     payment_id = request.args.get("payment_request_id")
@@ -407,7 +496,7 @@ def success():
     
     if not stored_status or stored_status.get("status") != 'succeeded':
         print(f"Payment ID {payment_id} not found or not succeeded.")
-        return redirect(url_for('fail', status='failed', payment_request_id=payment_id))
+        return redirect(url_for('fail', payment_request_id=payment_id, status='failed'))
         
     image_filename_with_url = session.get('image_filename_with_url')
     image_filename = session.get('image_filename')
@@ -432,11 +521,15 @@ def success():
         qr_base64 = base64.b64encode(buffer.getvalue()).decode('ascii')
         #print(f"QR code base64: {qr_base64}")
         
-    return render_template('success.html', qr_code=qr_base64)
+    return render_template('success.html', qr_code=qr_base64, index=False)
         
-# Payment through Hitpay website
 @app.route('/pay', methods=['POST'])
 def pay():
+    """Create a payment token and redirect to the Hitpay payment page.
+
+    Returns:
+        Response: JSON response containing the payment URL or an error message.
+    """
     try:
         # Create a unique payment token
         payment_token = secrets.token_urlsafe(16)
@@ -466,6 +559,11 @@ def pay():
 # Webhook for payment status
 @app.route('/payment-confirmation/webhook', methods=['POST'])
 def webhook():
+    """Handle the Hitpay webhook for payment confirmation.
+
+    Returns:
+        Response: JSON response indicating the status of the payment or an error message.
+    """
     raw_body = request.get_data()
     test_data = request.data
     print("Received:", raw_body)
@@ -526,10 +624,13 @@ def webhook():
             print("Payment failed or pending.")
             return jsonify({"status": "failed", "message": "Payment failed or pending"}), 400
         
-# Retrieve payment status
-# Check from the store if the payment ID exists
 @app.route('/payment-status', methods=['GET'])
 def payment_status():
+    """Retrieve the payment status based on the payment request ID.
+
+    Returns:
+        Response: JSON response containing the payment status or an error message.
+    """
     payment_request_id = request.args.get('payment_request_id')
     
     if not payment_request_id:
@@ -549,9 +650,17 @@ def payment_status():
 # Redirect user either success page or failed page
 @app.route('/redirect', methods=['GET'])
 def redirect_user():
+    """Redirect user to the success or fail page based on the payment status.
+       This function will be called after the payment is completed from Hitpay.
+
+    Returns:
+        Response: Rendered HTML template for the redirect page with payment status.
+    """
+    
     payment_request_id = request.args.get('reference')
     status_param = request.args.get('status')
     
+    # Check if the payment token exists in the session
     if 'payment_token' not in session:
         return "Invalid session token", 400
     
@@ -561,7 +670,7 @@ def redirect_user():
     session.pop('original_session', None)
     
     # DEBUG: Test data from original session
-    print("session data: ", session.get('session_id'))
+    print("Session data: ", session.get('session_id'))
     print("Current selected frame: " + session.get('frame_data'))
     
     # Store payment request ID. This will be used to save the payment status
@@ -569,12 +678,13 @@ def redirect_user():
         save_status(payment_request_id=payment_request_id, payment_id='None', status='canceled')
     
     print(request.args.to_dict())
-    return render_template('redirect.html', payment_request_id=payment_request_id, payment_status=status_param)
+    return render_template('redirect.html', payment_request_id=payment_request_id, payment_status=status_param, index=False)
 
-# Testing page
+# Testing page (Only for development purposes)
 @app.route('/test')
 def test():
-    return render_template('test.html')
+    return render_template('test.html', index=False)
+
 
 if __name__ == '__main__':
     app.run(debug=True)

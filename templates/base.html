@@ -11,11 +11,16 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
 </head>
-<body style="background-image: url('/static/images/top-view-circular-frame-with-travel-items.jpg'); background-size: cover;">
+<body style="background: url('/static/images/top-view-circular-frame-with-travel-items.jpg'); background-size: cover;">
     <main id="main-content">
     {% block content %}{% endblock %}
     </main>
 </body>
+    {% if index %}
+    <footer class="footer">
+        <p class="footer-text">© 2025 Muhammad Hazim. All rights reserved.</p>
+    </footer>
+    {% endif %}
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
     <script src="{{ url_for('static', filename='js/fade.js') }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
