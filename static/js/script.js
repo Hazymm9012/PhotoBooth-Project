@@ -184,7 +184,7 @@ function previewPageButtons(photoWidth, photoHeight) {
                 count = selectedTimer  // Use the selected timer value
             }
             
-            const countdownInterval = setInterval(() => {
+            const countdownInterval = setInterval(function() {
                 countdownEl.textContent = count;
                 countdownEl.classList.remove("fade-in-out"); // reset animation
                 void countdownEl.offsetWidth; // trigger reflow
@@ -218,6 +218,21 @@ function previewPageButtons(photoWidth, photoHeight) {
                   photo.style.display = "block";
                   video.style.display = "none";
 
+                  // Temporarily here. Remove this when merging uploadButton
+                  `fetch('/save_image', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        image: JSON.stringify({ image_url: photo.src })
+                        })
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        console.log('Image saved successfully:', data);
+                    });`
+                  
                   // Photo buttons
                   retakeButton.style.display = "inline-block";
                   uploadButton.style.display = "inline-block";
@@ -227,13 +242,13 @@ function previewPageButtons(photoWidth, photoHeight) {
                     //timerButton.style.display = "none";
                   // timerButton.style.display = "none";
                   setTimeout(() => {
-                    bottomButtonsContainer.style.display = "flex";
-                    topButtonsContainer.style.display = "flex";
-                    bottomButtonsContainer.classList.toggle("hiddenFade");
-                    topButtonsContainer.classList.toggle("hiddenFade");
-                    void bottomButtonsContainer.offsetWidth;
-                    void topButtonsContainer.offsetWidth;
-                      //document.getElementById("uploadButton").click();
+                    //bottomButtonsContainer.style.display = "flex";
+                    //topButtonsContainer.style.display = "flex";
+                    //bottomButtonsContainer.classList.toggle("hiddenFade");
+                    //topButtonsContainer.classList.toggle("hiddenFade");
+                    //void bottomButtonsContainer.offsetWidth;
+                    //void topButtonsContainer.offsetWidth;
+                    document.getElementById("uploadButton").click();
                     }, 1500); 
                   //payButton.style.display = "inline-block";
                   //saveButton.style.display = "inline-block"
@@ -261,7 +276,7 @@ function previewPageButtons(photoWidth, photoHeight) {
 
     // Retake button functionality
     if (retakeButton) {
-        retakeButton.addEventListener('click', function() {
+        retakeButton.addEventListener('click', async function() {
             console.log("Starting camera...");
     
             // Reset the photo element
@@ -276,9 +291,11 @@ function previewPageButtons(photoWidth, photoHeight) {
             captureButton.disabled = false;
             uploadButton.style.display = "none";
             timerContainerButtons.style.display = "inline-block";
-            //timerButton.style.display = "inline-block";
-            //timerButton.disabled = false;
-            //saveButton.style.display = "none";
+
+            // Delete the previous photo from the server. Data acquired from Flask.
+            await fetch('/delete_photo', {
+                method: 'POST',
+            });
     
             // Request access to the user's camera
             startCamera(photoWidth, photoHeight);
@@ -319,8 +336,37 @@ function previewPageButtons(photoWidth, photoHeight) {
             .then(data => {
                 console.log('Image uploaded successfully:', data);
                 document.getElementById("loading-text").textContent = "Showing your image...";
-                photo.src = data.image_url; 
-                photo.style.display = "block";
+                `fetch ('/save_image_file/preview', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        image: JSON.stringify({ image_url: data.image_url })
+                    })
+                }).then(res => res.json())
+                .then(data => {
+                    console.log('Image saved successfully:', data);
+                    photo.src = data.preview_image_filename_url;
+                    photo.style.display = "block";
+                //photo.src = data.image_url; 
+                //photo.style.display = "block";
+                })`
+                fetch('/save_image', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        image: JSON.stringify({ image_url: data.image_url })
+                        })
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        console.log('Image saved successfully:', data);
+                        photo.src = data.preview_image_filename_url;
+                        photo.style.display = "block";
+                    });
             })
             .catch(error => {
                 showAlertMessage("Failed to upload image. Please try again.\n Error: " + error.message);
@@ -328,12 +374,12 @@ function previewPageButtons(photoWidth, photoHeight) {
                 hideLoading();
                 }
             ).finally(() => {
-                //bottomButtonsContainer.style.display = "flex";
-                //topButtonsContainer.style.display = "flex";
-                //bottomButtonsContainer.classList.toggle("hiddenFade");
-                //topButtonsContainer.classList.toggle("hiddenFade");
-                //void bottomButtonsContainer.offsetWidth;
-                //void topButtonsContainer.offsetWidth;
+                bottomButtonsContainer.style.display = "flex";
+                topButtonsContainer.style.display = "flex";
+                bottomButtonsContainer.classList.toggle("hiddenFade");
+                topButtonsContainer.classList.toggle("hiddenFade");
+                void bottomButtonsContainer.offsetWidth;
+                void topButtonsContainer.offsetWidth;
                 setTimeout(() => {
                     hideLoading();  
                 }, 1500); // Hide loading after 1.5 seconds
@@ -352,7 +398,7 @@ function previewPageButtons(photoWidth, photoHeight) {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    image: photo.src
+                    image: photo.src,  
                 })
             })
             .then(res => {
@@ -554,7 +600,7 @@ document.addEventListener("DOMContentLoaded", function() {
         console.log("Has old photo size:", hasOldPhotoSize);
         if (hasPhotoSession && (!hasOldPhotoSize || oldPhotoSize === photoSession)) {
             console.log("Photo session already exists:", photoSession);
-            photo.src = `/static/photos/${photoSession}`;
+            photo.src = `/static/preview_photos/${photoSession}`;
             previewPageButtons(photoWidth, photoHeight);
             photo.style.display = "block";
             video.style.display = "none";

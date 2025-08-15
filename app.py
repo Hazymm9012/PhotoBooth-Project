@@ -207,7 +207,7 @@ def preview():
         str: Rendered HTML template for the preview page.
     """
     
-    photo_session = session.get('full_image_filename')
+    photo_session = session.get('preview_image_filename')
     
     # TEMPORARY SOLUTION (This will cause bug when user goes back to set size page)
     photo_width = session.get('image_width')
@@ -362,89 +362,6 @@ def upload():
     except Exception as e:
         print(f"❌ API Error: {e}")
         return jsonify({"error": str(e)}), 500
-    
-# Save an image file from javascript
-@app.route('/save_image_file/<method>', methods=['POST'])
-def save_image_file(method):
-    """Save an image file from javascript request to the folder.
-
-    Returns:
-        Response: JSON response with the filename of the saved image or an error message.
-    """
-    try:
-        method = method.lower()
-        if method not in ['preview', 'full']:
-            return jsonify({'error': 'Invalid method specified'}), 400
-        
-        # Retrieve the image data from the request
-        data = request.get_json()
-        image_data = data.get('image')
-        
-        if not image_data:
-            return jsonify({'error': 'No Image Provided'}), 400
-        
-        try:
-            header, base64_image = image_data.split(',', 1)
-        except ValueError:
-            return jsonify({'error': 'Invalid base64 image format'}), 400
-        image_data = base64.b64decode(base64_image)
-        timestamp = time.strftime("%d%m%Y-%H%M%S")
-        
-        full_path = ""
-        filename = ""
-        if method == 'preview':
-            if not os.path.exists(PREVIEW_DIR):
-                os.makedirs(PREVIEW_DIR)
-            filename = f"photo_{timestamp}.jpeg"
-            full_path = os.path.join(PREVIEW_DIR, filename)
-            with open(full_path, "wb") as file:
-                file.write(image_data)
-            
-            # Add watermark to the preview image
-            preview_image = Image.open(full_path)
-            draw = ImageDraw.Draw(preview_image)
-            watermark_text = "PREVIEW ONLY"
-            font = ImageFont.load_default(45)
-            colour = (255, 255, 255)
-            draw.text((10, 10), watermark_text, fill=colour, font=font)
-            preview_image.save(full_path, "JPEG")
-            
-            # Store the filename in the session for later use
-            session['preview_image_filename_url'] = full_path 
-            session['preview_image_filename'] = filename
-            return jsonify({"preview_image_filename": filename}), 200
-                
-        elif method == 'full':
-            if not os.path.exists(PHOTO_DIR):
-                os.makedirs(PHOTO_DIR)
-            filename = f"photo_{timestamp}.png"
-            full_path = os.path.join(PHOTO_DIR, filename)
-            with open(full_path, "wb") as file:
-                file.write(image_data)
-                
-            # Generate unique code for the photo
-            chars = string.ascii_uppercase + string.digits
-            unique_code = ''.join(secrets.choice(chars) for _ in range(6))
-            photo_frame = session.get('photo_size')
-            
-            # Save the photo to the database
-            photo = Photo(path="/" + full_path,
-                          filename=f"photo_{timestamp}.png",
-                          unique_code=unique_code,
-                          frame="7 cm x 10 cm" if photo_frame == "frame1" else "14 cm x 10 cm",
-                          date_of_save=datetime.now(UTC) + timedelta(hours=8))  # Timezone adjustment for UTC+8
-            db.session.add(photo)
-            db.session.commit()
-            
-            # Store the filename in the session for later use
-            session['full_image_filename_url'] = full_path 
-            session['full_image_filename'] = filename
-            
-            return jsonify({"full_image_filename": filename}), 200
-        
-    except Exception as e:
-        print(f"❌ Error saving photo: {e}")
-        return jsonify({"error": str(e)}), 500
       
     
 # Capture Photo 
@@ -511,17 +428,64 @@ def save_image():
         db.session.add(photo)
         db.session.commit()
         
-        # Store the filename in the session for later use
+        # Store the preview photo filename in the session
         session['preview_image_filename_url'] = preview_filename # This is solely for preview purposes
+        session['preview_image_filename'] = f"photo_{timestamp}.jpeg"
+        
+        # Store the HD photo filename in the session
         session['full_image_filename_url'] = hd_filename  # This is the HD photo
         session['full_image_filename'] = f"photo_{timestamp}.png"
         
-        return jsonify({"full_image_filename": f"photo_{timestamp}.png"}), 200
+        return jsonify({"preview_image_filename_url": preview_filename}), 200
     
     except Exception as e:
         print(f"❌ Error saving photo: {e}")
         return jsonify({"error": str(e)}), 500
+
+# Delete current photo
+@app.route('/delete_photo', methods=['POST'])
+def delete_photo():
+    """Delete the current photo from the server and database.
+    Returns:
+        Response: JSON response indicating success or failure of the deletion.
+    """
+    full_image_filename = session.get('full_image_filename')
+    full_hd_photo_path = session.get('full_image_filename_url')
+    full_preview_photo_path = session.get('preview_image_filename_url')
+    if not full_image_filename or not full_hd_photo_path or not full_preview_photo_path:
+        return jsonify({"error": "No photo to delete"}), 400
+    try:
+        # Check if the current photo exists in the database and delete it
+        current_photo = Photo.query.filter_by(filename=full_image_filename, status=PhotoStatus.PENDING).first()
         
+        if current_photo:
+            print(f"Current photo found: {current_photo.path}")
+            db.session.delete(current_photo)  # Delete the photo from the database
+            db.session.commit()
+            
+            # Remove the HD photo from the server if it exists
+            if os.path.exists(full_hd_photo_path):
+                os.remove(full_hd_photo_path)
+                print(f"HD photo {full_hd_photo_path} deleted from server.")
+            
+            # Remove the preview photo from the server if it exists
+            if os.path.exists(full_preview_photo_path):
+                os.remove(full_preview_photo_path)
+                print(f"Preview photo {full_preview_photo_path} deleted from server.")
+                
+            # Clear session data related to the photo
+            session.pop('full_image_filename', None)
+            session.pop('full_image_filename_url', None)
+            session.pop('preview_image_filename', None)
+            session.pop('preview_image_filename_url', None)
+            
+            return jsonify({"message": "Photo deleted successfully"}), 200
+        else:
+            print("❌ Current photo not found in database.")
+            return jsonify({"error": "Photo not found"}), 404  
+    except Exception as e:
+        print(f"❌ Error deleting photo: {e}")
+        return jsonify({"error": str(e)}), 500  
 
 # Exit function
 @app.route('/exit')
@@ -599,7 +563,9 @@ def payment():
     """
     
     # Save the image
-    save_image()
+    #save_image_file('preview')  # Save the preview image file (this is temporary)
+    #save_image_file('full')  # Save the full image file
+    #save_image()
     return redirect(url_for('payment_summary'))
 
 # View payment summary
