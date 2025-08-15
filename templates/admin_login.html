@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Welcome | Photo Booth{% endblock %}
+
+{% block content %}
+
+
+<div class="container-form">
+    <main class="card" role="main" aria-labelledby="title">
+        <h1 id="title">Admin Login</h1>
+        <p class="sub">Enter your credentials to access download system.</p>
+    
+        <!-- Flash messages from Flask -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert {{ 'error' if category=='danger' else category }}">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+    
+        <form method="POST" action="{{ url_for('admin_login') }}" novalidate>
+          <div class="field">
+            <label for="username">Username</label>
+            <div class="input-wrap">
+              <input id="username" name="username" type="text" autocomplete="username" required />
+            </div>
+          </div>
+    
+          <div class="field">
+            <label for="password">Password</label>
+            <div class="input-wrap">
+              <input id="password" name="password" type="password" autocomplete="current-password" required />
+              <button class="toggle" type="button" aria-label="Show password" onclick="togglePw()">👁️</button>
+            </div>
+          </div>
+    
+          <div class="row" style="margin: 10px 0 18px;">
+            <label class="remember">
+              <input type="checkbox" name="remember" value="1" />
+              Remember me
+            </label>
+          </div>
+    
+          <button class="btn" type="submit">Sign in</button>
+        </form>
+    
+        <div class="footer-admin">Protected area • Authorized personnel only</div>
+    </main>
+</div>
+{% endblock %}

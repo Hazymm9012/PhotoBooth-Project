@@ -5,9 +5,14 @@
 {% block content %}
     <audio id="alert-sound" src="/static/audio/select-003-337609.mp3" preload="auto"></audio>
     <h1>Payment Successful</h1> 
-    <h3>Thank you for your payment! Scan this QR code to download your image! <br> This QR code will expire after 10 minutes.</h3>
-    <div class="qr-container">
-        <img src="data:image/png;base64,{{ qr_code }}" alt="QR Code">
+    <h3>Thank you for your payment! Scan this QR code to download your image! <br> This QR code will expire after 10 minutes. <br> Take the 6-digit code to the print counter.</h3>
+    <div class="container-wrapper">
+        <div class="qr-container">
+            <img src="data:image/png;base64,{{ qr_code }}" alt="QR Code">
+        </div>
+        <div class="container-unique-code">
+            <h3>Your 6-digit code is: <br> <span class="unique-code">{{ photo.unique_code }}</span> </h3>
+        </div>
     </div>
     <a id="exitButton" class="exit-button">
         <i class="fa fa-sign-out"></i>

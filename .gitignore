@@ -4,3 +4,4 @@ __pycache__/payment_status_store.cpython-312.pyc
 __pycache__/utils.cpython-312.pyc
 static/photos
 .DS_Store
+templates/test.html

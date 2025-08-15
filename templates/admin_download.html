@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Welcome | Photo Booth{% endblock %}
+
+{% block content %}
+
+<div id="blur-overlay"></div>
+<div id="loading-text" class="loading-text" style="display: none">Please Wait ...</div>
+<div id="loading-element" class="loader" style="display: none"></div>
+<div id="error-message" style="color: red"></div>
+<a class="exit-button" id="logoutButton">
+    <i class="fa fa-sign-out"></i>
+</a>
+
+<div class="container-download">
+    <h1>Download Customer's Photo</h1>
+    <h3>Enter Customer's 6-Digit Code: </h3>
+    <form id="download-form">
+        <div class="form-group">
+            <label for="unique_code">6-Digit Code:</label>
+            <input type="text" id="unique_code" name="unique_code" class="form-control" maxlength="6">
+        </div>
+        <button class="btn btn-primary" id="download-photo">Download Photo</button>
+    </form>
+</div>
+{% endblock %}

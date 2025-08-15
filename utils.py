@@ -9,6 +9,9 @@ import requests
 import socket
 import hmac 
 import hashlib
+import re 
+import pymysql
+from sqlalchemy.engine.url import make_url, URL
 
 
 # Load image from file and convert to data URI
@@ -127,6 +130,48 @@ def clear_session():
         if key != 'camera_session':
             session.pop(key)
 
-    
-    
+def create_database_connection(db_url):
+    """
+    Accepts a mysql+pymysql URL (str or sqlalchemy URL).
+    Connects without selecting a DB, then CREATE DATABASE IF NOT EXISTS.
+    """
+    # Parse if needed
+    if isinstance(db_url, str):
+        url = make_url(db_url)
+    elif isinstance(db_url, URL):
+        url = db_url
+    else:
+        raise TypeError("db_url must be a str or sqlalchemy.engine.url.URL")
 
+    if url.drivername != "mysql+pymysql":
+        raise ValueError(f"Unsupported driver: {url.drivername}")
+
+    db_name = url.database
+    if not db_name:
+        raise ValueError("Database name missing in URL")
+
+    # Handle TCP vs Unix socket
+    # If using ?unix_socket=/tmp/mysql.sock in the URL, host may be None
+    unix_socket = url.query.get("unix_socket")
+    conn_kwargs = dict(
+        user=url.username,
+        password=url.password,
+        charset="utf8mb4",
+        autocommit=True,
+    )
+    if unix_socket:
+        conn_kwargs["unix_socket"] = unix_socket
+    else:
+        conn_kwargs["host"] = url.host or "127.0.0.1"
+        conn_kwargs["port"] = url.port or 3306
+
+    # Connect WITHOUT selecting a DB
+    conn = pymysql.connect(**conn_kwargs)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"CREATE DATABASE IF NOT EXISTS `{db_name}` "
+                "CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
+            )
+    finally:
+        conn.close()

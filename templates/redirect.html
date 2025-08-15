@@ -95,7 +95,7 @@
                   } else if (++attempts >= maxAttempts) {
                     clearInterval(poll);
                     console.warn('Assuming canceled due to timeout');
-                    callback('failed');  // fallback assumption
+                    callback('unknown');  // fallback assumption
                   }
                 })
                 .catch(err => {

@@ -12,9 +12,11 @@
     <div id="blur-overlay"></div>
     <div id="photo-settings"
      data-photo-width="{{ photo_width }}"
-     data-photo-height="{{ photo_height }}"></div>
+     data-photo-height="{{ photo_height }}"
+     data-photo-session="{{ photo_session }}"
+     data-old-photo-size="{{ old_photo_size }}"></div>
     <div id="page-content">
-        <div class="container-button">
+        <div id="container-button-top" class="container-button-top">
             <a class="exit-button" id="exitButton">
                 <i class="fa fa-sign-out"></i>
             </a>
@@ -25,14 +27,38 @@
         <div class="container-wrapper">
             <div class="container-image">
                 <video id="video" class="responsive-image" oncontextmenu="return false;" preload="metadata" autoplay ></video>
+                <div id="flash" aria-hidden="true"></div>
                 <img id="photo" class="responsive-image" style="display: none" oncontextmenu="return false;"/>
                 <canvas id="canvas" style="display: none"></canvas>
                 <audio id="beep-sound" src="/static/audio/timer_countdown_5_secs.mp3" preload="auto"></audio>
+                <audio id="shutter-sound" src="/static/audio/camera-shutter-6305.mp3" preload="auto"></audio>
             </div>
             <div class="container-button-bottom" id="container-button-bottom">
                     <button class="frame-button" id="paymentButton" style="display: none">
                         <i class="fas fa-shopping-cart"></i>
                     </button>
+                    <div class="menu-container" id="timer-container-buttons">
+                        <input type="checkbox" id="menu-toggler" class="menu-toggler" hidden>
+                        <div class="container">
+                            <button class="timer-toggle-btn frame-button">
+                                <i class="fa-solid fa-clock"></i>
+                            </button>
+                        </div>
+                        <ul class="menu-list">
+                            <li class="menu-item">
+                                <a href="javascript:void(0)" onClick="setTimer(0, this)">⏱ Timer Off</a>
+                            </li>
+                            <li class="menu-item">
+                                <a href="javascript:void(0)" onClick="setTimer(3, this)">⏱ 3 s</a>
+                            </li>
+                            <li class="menu-item selected">
+                                <a href="javascript:void(0)" onClick="setTimer(5, this)">⏱ 5 s</a>
+                            </li>
+                            <li class="menu-item">
+                                <a href="javascript:void(0)" onClick="setTimer(10, this)">⏱ 10 s</a>
+                            </li>
+                        </ul>
+                    </div>
                     <button class="frame-button" id="captureButton">
                         <i class="fas fa-camera"></i>
                     </button>
@@ -45,30 +71,8 @@
                 <!--<button class="frame-button" id="timerButton">
                     <i class="fa-solid fa-clock"></i>
                 </button>-->
-                <div class="menu-container" id="timer-container-buttons">
-                    <input type="checkbox" id="menu-toggler" class="menu-toggler" hidden>
-                    <div class="container">
-                        <button class="timer-toggle-btn frame-button">
-                            <i class="fa-solid fa-clock"></i>
-                        </button>
-                    </div>
-                    <ul class="menu-list">
-                        <li class="menu-item">
-                            <a href="javascript:void(0)" onClick="setTimer(0, this)">⏱ Timer Off</a>
-                        </li>
-                        <li class="menu-item">
-                            <a href="javascript:void(0)" onClick="setTimer(3, this)">⏱ 3 s</a>
-                        </li>
-                        <li class="menu-item selected">
-                            <a href="javascript:void(0)" onClick="setTimer(5, this)">⏱ 5 s</a>
-                        </li>
-                        <li class="menu-item">
-                            <a href="javascript:void(0)" onClick="setTimer(10, this)">⏱ 10 s</a>
-                        </li>
-                    </ul>
-                </div>
-                <button id="stopButton" style="display: block"> Stop Camera - DEBUG ONLY</button> 
-                <button id="startButton" style="display: block"> Start Camera - DEBUG ONLY</button> 
+                <button id="stopButton" style="display: none"> Stop Camera - DEBUG ONLY</button> 
+                <button id="startButton" style="display: none"> Start Camera - DEBUG ONLY</button> 
                 <button id="loadingButton" style="display: none">Loading button - DEBUG ONLY</button>
                 <!--<button id="saveButton" style="display: none">Save Photo - DEBUG ONLY</button>-->
                 <button id="countdownButton" style="display: none">Start Countdown - DEBUG ONLY</button>

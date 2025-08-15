@@ -1,7 +1,7 @@
 document.documentElement.requestFullscreen();
 selectedTimer = null; // Initialize selected timer
 
-//  
+// Set the selected timer when a menu item is clicked  
 function setTimer(timer, element) {
     // Change the selected timer
     selectedTimer = timer;
@@ -19,11 +19,36 @@ function setTimer(timer, element) {
     }
 }
 
+// Function to toggle flash for the camera 
+function toggleFlash() {
+    const flash = document.getElementById('flash');
+
+    flash.classList.remove('flash-anim');
+    void flash.offsetWidth;
+    flash.classList.add('flash-anim');
+}
+
 // Function to toggle the dropdown visibility
 function toggleTimerDropdown() {
     const timerDropdown = document.getElementById('timerDropdown');
     timerDropdown.classList.toggle('hidden');
 }
+
+// Function to wait for the video to be ready
+function waitForVideoReady(video) {
+    return new Promise(resolve => {
+      if (video.videoWidth && video.videoHeight && video.readyState >= 2) return resolve();
+      const onReady = () => {
+        if (video.videoWidth && video.videoHeight && video.readyState >= 2) {
+          video.removeEventListener('loadedmetadata', onReady);
+          video.removeEventListener('canplay', onReady);
+          resolve();
+        }
+      };
+      video.addEventListener('loadedmetadata', onReady);
+      video.addEventListener('canplay', onReady);
+    });
+  }
 
 // Show loading screen
 function showLoading(text) {
@@ -104,6 +129,16 @@ async function startCamera(photoWidth, photoHeight) {
     }
 }
 
+// Show or hide the password input field
+function togglePw() {
+    const input = document.getElementById('password');
+    const btn = event.currentTarget;
+    const isPw = input.type === 'password';
+    input.type = isPw ? 'text' : 'password';
+    btn.setAttribute('aria-label', isPw ? 'Hide password' : 'Show password');
+    btn.textContent = isPw ? '🙈' : '👁️';
+  }
+
 // Function to handle preview page buttons and camera functionality
 function previewPageButtons(photoWidth, photoHeight) {
     const retakeButton = document.getElementById('retakeButton');
@@ -119,20 +154,25 @@ function previewPageButtons(photoWidth, photoHeight) {
     const photo = document.getElementById("photo");
     const canvas = document.getElementById("canvas");
     const timerContainerButtons = document.getElementById("timer-container-buttons");
+    const topButtonsContainer = document.getElementById("container-button-top");
+    const bottomButtonsContainer = document.getElementById("container-button-bottom")
+    const flash = document.getElementById("flash");
     //const timerButton = document.getElementById("timerButton");
     
     if (captureButton) {
         captureButton.addEventListener('click', function() {
-            const previewButtonsContainer = document.getElementById("container-button-bottom")
+            const shutterSound = document.getElementById("shutter-sound");
             console.log("Capture button clicked...");
             // Check if camera is turn on
             if (!video.srcObject) {
                 showAlertMessage("Camera is not turned on. Please turn on the camera first.");
                 return;
             }
-            previewButtonsContainer.classList.toggle("hiddenFade");
+            bottomButtonsContainer.classList.toggle("hiddenFade");
+            topButtonsContainer.classList.toggle("hiddenFade");
             setTimeout(() => {
-                previewButtonsContainer.style.display = "none";
+                bottomButtonsContainer.style.display = "none";
+                topButtonsContainer.style.display = "none";
             }, 500); // must match the transition duration (800ms)
             
             // Initialize countdown
@@ -160,13 +200,14 @@ function previewPageButtons(photoWidth, photoHeight) {
                 if (count === 0) {
                   clearInterval(countdownInterval);
                   countdownEl.classList.add("hidden");
-                  previewButtonsContainer.style.display = "flex"; 
+                  // previewButtonsContainer.style.display = "flex"; 
+                  toggleFlash(); // Call flash function
 
                   // Force reflow to ensure transition triggers
-                  void previewButtonsContainer.offsetWidth;
-                  previewButtonsContainer.classList.toggle("hiddenFade");
                   beepSound.pause() 
                   beepSound.currentTime = 0;   // reset sound
+                  shutterSound.currentTime = 0; // reset sound
+                  shutterSound.play().catch(e => console.warn("Shutter sound failed:", e));
 
                   // Capture image
                   const context = canvas.getContext("2d");
@@ -185,7 +226,15 @@ function previewPageButtons(photoWidth, photoHeight) {
                   timerContainerButtons.style.display = "none";
                     //timerButton.style.display = "none";
                   // timerButton.style.display = "none";
-                  document.getElementById("uploadButton").click();
+                  setTimeout(() => {
+                    bottomButtonsContainer.style.display = "flex";
+                    topButtonsContainer.style.display = "flex";
+                    bottomButtonsContainer.classList.toggle("hiddenFade");
+                    topButtonsContainer.classList.toggle("hiddenFade");
+                    void bottomButtonsContainer.offsetWidth;
+                    void topButtonsContainer.offsetWidth;
+                      //document.getElementById("uploadButton").click();
+                    }, 1500); 
                   //payButton.style.display = "inline-block";
                   //saveButton.style.display = "inline-block"
     
@@ -269,15 +318,22 @@ function previewPageButtons(photoWidth, photoHeight) {
             .then(response => response.json())
             .then(data => {
                 console.log('Image uploaded successfully:', data);
+                document.getElementById("loading-text").textContent = "Showing your image...";
                 photo.src = data.image_url; 
                 photo.style.display = "block";
             })
             .catch(error => {
-                showAlertMessage("Failed to upload image. Please try again.\nError: " + error.message);
+                showAlertMessage("Failed to upload image. Please try again.\n Error: " + error.message);
                 console.error('Error uploading image:', error);
+                hideLoading();
                 }
             ).finally(() => {
-                document.getElementById("loading-text").textContent = "Showing your image...";
+                //bottomButtonsContainer.style.display = "flex";
+                //topButtonsContainer.style.display = "flex";
+                //bottomButtonsContainer.classList.toggle("hiddenFade");
+                //topButtonsContainer.classList.toggle("hiddenFade");
+                //void bottomButtonsContainer.offsetWidth;
+                //void topButtonsContainer.offsetWidth;
                 setTimeout(() => {
                     hideLoading();  
                 }, 1500); // Hide loading after 1.5 seconds
@@ -301,9 +357,10 @@ function previewPageButtons(photoWidth, photoHeight) {
             })
             .then(res => {
                 if (res.redirected) {
-                  window.location.href = res.url; // ✅ Go to /payment page
+                    hideLoading();
+                    window.location.href = res.url; // ✅ Go to /payment page
                 } else {
-                  return res.json();
+                    return res.json();
                 }
               }).catch(err => {
                 console.error("Fetch error:", err);
@@ -363,11 +420,10 @@ function previewPageButtons(photoWidth, photoHeight) {
         showLoading();
         console.log("Loading screen shown...");
         setTimeout(() => {
-            console.log("Hiding loading screen...");
+           console.log("Hiding loading screen...");
            hideLoading();
         }, 5000); // Hide loading after 5 seconds
     });
-        
 
     //saveButton.addEventListener('click', function() {
         // Save the image to the server
@@ -411,11 +467,13 @@ const payButton = document.getElementById("payButton");
 document.addEventListener("DOMContentLoaded", function() {
     const path = window.location.pathname;
     const exitButton = document.getElementById('exitButton');
+    const logoutButton = document.getElementById('logoutButton');
     console.log("Path:", window.location.pathname);
 
     const toggleButtons = document.querySelectorAll('.timer-toggle-btn');
     const menuLists = document.querySelectorAll('.menu-list');
     const menuItems = document.querySelectorAll('.menu-item');
+    const timerContainerButtons = document.getElementById("timer-container-buttons");
 
     toggleButtons.forEach(btn => {
         btn.addEventListener('click', function () {
@@ -430,6 +488,8 @@ document.addEventListener("DOMContentLoaded", function() {
             menuLists.forEach(menu => {
                 menu.classList.toggle("effect");
             });
+
+            void toggleButtons.offsetWidth; // Trigger reflow to ensure transition works
         });
     });
 
@@ -453,7 +513,15 @@ document.addEventListener("DOMContentLoaded", function() {
             showConfirmationMessage("Exit", "Are you sure you want to exit ?", "Exit", "Cancel", "/exit");
         });
     }
-    
+
+    // Logout button (ADMIN ONLY).
+    if (logoutButton) {
+        logoutButton.addEventListener("click", (e) => {
+            e.preventDefault();
+            showConfirmationMessage("Logout", "Are you sure you want to logout ?", "Logout", "Cancel", "/admin/logout");
+        });
+    }
+
     if (path === ("/fail")) {
         showConfirmationMessage("Payment Failed", "Your payment has failed. Please try again.", "Try Again", "Return Home", "/preview")
     }
@@ -468,6 +536,10 @@ document.addEventListener("DOMContentLoaded", function() {
         console.log(`Viewport size: ${width}x${height}`);
 
         // Get the video element
+        const photoSession = settings.dataset.photoSession;
+        const oldPhotoSize = settings.dataset.oldPhotoSize;
+        console.log("Photo session from Flask:", photoSession);
+        console.log("Old photo size from Flask:", oldPhotoSize);
         const photoWidth = parseInt(settings.dataset.photoWidth);
         const photoHeight = parseInt(settings.dataset.photoHeight);
 
@@ -475,25 +547,42 @@ document.addEventListener("DOMContentLoaded", function() {
         // Camera auto-load on preview page
         console.log("Photo dimensions from Flask:", photoWidth, photoHeight);
 
-        window.onload = function() {
-            // Start the camera
-            startCamera(photoWidth, photoHeight);
-
-            // Show all the page buttons
+        // If the photo session is already set, display the photo
+        const hasPhotoSession = photoSession && photoSession !== "undefined" && photoSession !== "null";
+        const hasOldPhotoSize = oldPhotoSize && oldPhotoSize !== "undefined" && oldPhotoSize !== "None";
+        console.log("Has photo session:", hasPhotoSession);
+        console.log("Has old photo size:", hasOldPhotoSize);
+        if (hasPhotoSession && (!hasOldPhotoSize || oldPhotoSize === photoSession)) {
+            console.log("Photo session already exists:", photoSession);
+            photo.src = `/static/photos/${photoSession}`;
             previewPageButtons(photoWidth, photoHeight);
-            setTimeout(() => {
-                const content = document.getElementById("content");
-                content.style.display = 'block';
-            }, 500);
+            photo.style.display = "block";
+            video.style.display = "none";
+            retakeButton.style.display = "inline-block";
+            uploadButton.style.display = "inline-block";
+            captureButton.style.display = "none";
+            paymentButton.style.display = "inline-block";
+            timerContainerButtons.style.display = "none";
+            //timerButton.style.display = "none";
+        } else {
+            console.log("No photo session found, starting camera...");
+            window.onload = function() {
+                // Start the camera
+                startCamera(photoWidth, photoHeight);
+    
+                // Show all the page buttons
+                previewPageButtons(photoWidth, photoHeight);
+
+            }
         }
-        
+
         // This needs to be in "preview if" statement
         if (path === "/payment-summary"){
             //const photoFilename = {{ photo_filename }};
             window.onload = function() {
                 const photoSummary = document.getElementById("photo-summary");
                 const canvasSummary = document.getElementById("canvas-summary");
-                photoSummary.src = "/static/{{ photo_filename }}";
+                photoSummary.src = "{{ photo_filename }}";
                 photoSummary.style.display = "block";
                 setTimeout(() => {
                     hideLoading();
@@ -504,6 +593,35 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     };    
     
+    if (path === "/admin/download") {
+        document.getElementById("download-form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            showLoading();
+            const code = e.target.unique_code.value;
+
+            const response = await fetch('/download', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ unique_code: code })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                showAlertMessage(data.error);
+                hideLoading();
+                return;
+            }
+            
+            setTimeout(() => {
+                window.location.href = data.url
+                hideLoading();
+            }, 1000);
+        
+        });
+    }
 });
 
 document.querySelectorAll(".frame-button").forEach(button => {
@@ -543,7 +661,6 @@ if (payButton) {
     });
     
 }
-
 
 document.querySelectorAll(".frame-button").forEach(btn => {
     btn.addEventListener('touchstart', () => {

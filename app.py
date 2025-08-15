@@ -1,15 +1,19 @@
+import string
 import uuid
-from flask import Flask, abort, render_template, request, redirect, url_for, session, jsonify, send_file
+from flask import Flask, abort, render_template, request, redirect, url_for, session, jsonify, send_file, flash
 from together import Together
 from tkinter import *
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
-from utils import  encode_image, is_valid_base64, encode_image_to_data_url, get_local_ip, verify_hitpay_signature, clear_session
+from utils import  encode_image, is_valid_base64, encode_image_to_data_url, get_local_ip, verify_hitpay_signature, clear_session, create_database_connection
 from payment_status_store import load_status_store, save_status, get_status, get_last_item_from_store
 from openai import OpenAI
 from itsdangerous import URLSafeTimedSerializer
 from datetime import datetime, timedelta, UTC
 from dotenv import load_dotenv
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
+from models import db
 
 import os
 import time
@@ -25,25 +29,53 @@ load_dotenv()
 
 # Initialize Flask app and configure settings
 app = Flask(__name__)
-app.config['SERVER_NAME'] = None
-app.config['SESSION_COOKIE_SECURE'] = True
+migrate = Migrate()
+db_url = os.environ.get('DATABASE_URL')
+
+# Check if DATABASE_URL is set in the environment variables
+if not db_url:
+    raise ValueError("DATABASE_URL environment variable is not set.")
+
+# Create database connection
+create_database_connection(db_url)  # Create database connection
+
+app.config["SQLALCHEMY_DATABASE_URI"] = db_url
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["SESSION_COOKIE_SECURE"] = True  # Set to True in production
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"  # Set to 'Strict' in production
 
 # Ensure app, openai, hitpay salt and api keys are set up in .env
-app.secret_key = os.environ.get('SECRET_KEY')
+app.secret_key = os.environ.get('SECRET_KEY')   
 client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'), timeout=80)  
 HITPAY_SALT = os.environ.get('HITPAY_SALT')
 HITPAY_API_KEY = os.environ.get('HITPAY_API_KEY')
-ALLOWED_IPS = ['202.168.65.122']
+ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME')  
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD')  
+
+# Set allowed IP addresses for development and production
+ALLOWED_IPS = ['202.168.65.122', '127.0.0.1']
 
 # Constants and global variables
-PHOTO_DIR = 'static/photos'
-PREVIEW_DIR = 'static/previews'
+PHOTO_DIR = 'full_photos'
+PREVIEW_DIR = 'static/preview_photos'
 
 # Initialize the payment status store
 payment_status_store = {}
 
 # Load the payment status store from file
 load_status_store()
+
+# Initialize SQLAlchemy and Migrate
+db.init_app(app)
+migrate.init_app(app, db)
+from models import Photo, Payment, PhotoStatus  # This needs to be declared after db.init_app(app) to avoid circular imports
+
+# Create database tables if they do not exist
+with app.app_context():
+    db.drop_all()  # Drop all tables (for development purposes, remove in production)
+    db.create_all() # recreates tables from models
+    print("Models mapped:", list(db.metadata.tables.keys()))
+    
 
 # Check session ID and create a new one if it doesn't exist
 @app.before_request
@@ -75,8 +107,36 @@ def not_found_error(error):
     """Handle 404 errors by rendering the 404 error page."""
     return render_template('404.html'), 404
 
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    """Admin login route to authenticate the admin user.
+
+    Returns:
+        Response: Rendered HTML template for the admin login page or redirects to admin download page upon successful login.
+    """
+    if request.method == "POST":
+        u = (request.form.get("username") or "").strip()
+        p = request.form.get("password") or ""
+        remember = request.form.get("remember") == "1"
+
+        ok = (u == ADMIN_USERNAME and p == ADMIN_PASSWORD)
+
+        if ok:
+            session["is_admin"] = True
+            if remember:
+                session.permanent = True  # respect PERMANENT_SESSION_LIFETIME
+            return redirect(url_for("admin_download"))
+        flash("Invalid credentials", "danger")
+    return render_template("admin_login.html")
+
+# Admin logout route
+@app.get("/admin/logout")
+def admin_logout():
+    session.clear()
+    return redirect(url_for("admin_login"))
+
 # Generate secure link for the image file
-def get_secure_image_url(filename):
+def get_secure_image_url(filename, add_expiration=True, download=False):
     """Generate a secure link for the image file using JWT token.
 
     Args:
@@ -86,16 +146,19 @@ def get_secure_image_url(filename):
         str: A secure link to access the image file.
     """
     payload = {
-        "image_path": f"{filename}",
-        "exp": datetime.now(UTC) + timedelta(minutes=10)  # expires in 10 mins
+        "image_path": f"{filename}"
     }
+    
+    if add_expiration:
+        # Set expiration time for the token (10 minutes)
+        payload['exp'] = datetime.now(UTC) + timedelta(minutes=10)
     
     # Generate token
     token = jwt.encode(payload, app.secret_key, algorithm='HS256')
     token = token if isinstance(token, str) else token.decode("utf-8")
     
     # Create a secure link
-    secure_link = url_for('view_secure_image', token=token, _external=True)
+    secure_link = url_for('view_secure_image', token=token, download=download, _external=True)
     return secure_link
 
 # View secure image
@@ -107,6 +170,7 @@ def view_secure_image():
         Response: The image file if the token is valid, otherwise an error message.
     """
     token = request.args.get('token')
+    download = request.args.get('download', 'false').lower() == 'true'
     if not token:
         return "Invalid or missing token", 400
     
@@ -121,7 +185,7 @@ def view_secure_image():
             return "Image not found", 404
         
         # Send the image file
-        return send_file(full_path, as_attachment=True)
+        return send_file(full_path, as_attachment=download)
     
     except jwt.ExpiredSignatureError:
         return "Token has expired", 403
@@ -142,15 +206,25 @@ def preview():
     Returns:
         str: Rendered HTML template for the preview page.
     """
+    
+    photo_session = session.get('full_image_filename')
+    
+    # TEMPORARY SOLUTION (This will cause bug when user goes back to set size page)
     photo_width = session.get('image_width')
     photo_height = session.get('image_height')
+    img_ratio = photo_width / photo_height
     
+    # If the photo session available, restore the session
+    if photo_session:
+        print("Session photo data found:", photo_session)
+        old_photo_size = session.get('old_photo_size')
+        return render_template('preview.html', photo_width=photo_width, photo_height=photo_height, session_id=session['session_id'], img_ratio=img_ratio, photo_session=photo_session, old_photo_size=old_photo_size, index=False)
+            
     # Check if the width and height of the preview camera are available
     if photo_height is None or photo_height is None:
         return "Photo width and Photo height are required", 403
     
     print(f"Retrieved values: width {photo_width}, height {photo_height}")
-    img_ratio = photo_width / photo_height
     return render_template('preview.html', photo_width=photo_width, photo_height=photo_height, session_id=session['session_id'], img_ratio=img_ratio, index=False)
 
 # Choose print size for photo
@@ -175,6 +249,10 @@ def set_size():
     image_width = 0
     image_height = 0
     selected_size = request.form.get('size')
+    
+    if 'photo_size' in session and session['photo_size'] != selected_size:
+        session['old_photo_size'] = session.get('photo_size')
+        
     session['photo_size'] = selected_size
     
     # Set the width and height based on the selected size
@@ -270,6 +348,7 @@ def upload():
         else:
             return jsonify({"error": "No image generated"}), 400
     except requests.exceptions.Timeout:
+        print("❌ Request to OpenAI timed out")
         return jsonify({"error": "The request to OpenAI timeout"}), 503
     
     except requests.exceptions.ConnectionError:
@@ -277,10 +356,94 @@ def upload():
         return jsonify({"error": "Network Connection Error"}),  503
     
     except socket.timeout:
+        print(f"❌ Socket timeout")
         return jsonify({"error": "Socket Timeout"}), 504
     
     except Exception as e:
         print(f"❌ API Error: {e}")
+        return jsonify({"error": str(e)}), 500
+    
+# Save an image file from javascript
+@app.route('/save_image_file/<method>', methods=['POST'])
+def save_image_file(method):
+    """Save an image file from javascript request to the folder.
+
+    Returns:
+        Response: JSON response with the filename of the saved image or an error message.
+    """
+    try:
+        method = method.lower()
+        if method not in ['preview', 'full']:
+            return jsonify({'error': 'Invalid method specified'}), 400
+        
+        # Retrieve the image data from the request
+        data = request.get_json()
+        image_data = data.get('image')
+        
+        if not image_data:
+            return jsonify({'error': 'No Image Provided'}), 400
+        
+        try:
+            header, base64_image = image_data.split(',', 1)
+        except ValueError:
+            return jsonify({'error': 'Invalid base64 image format'}), 400
+        image_data = base64.b64decode(base64_image)
+        timestamp = time.strftime("%d%m%Y-%H%M%S")
+        
+        full_path = ""
+        filename = ""
+        if method == 'preview':
+            if not os.path.exists(PREVIEW_DIR):
+                os.makedirs(PREVIEW_DIR)
+            filename = f"photo_{timestamp}.jpeg"
+            full_path = os.path.join(PREVIEW_DIR, filename)
+            with open(full_path, "wb") as file:
+                file.write(image_data)
+            
+            # Add watermark to the preview image
+            preview_image = Image.open(full_path)
+            draw = ImageDraw.Draw(preview_image)
+            watermark_text = "PREVIEW ONLY"
+            font = ImageFont.load_default(45)
+            colour = (255, 255, 255)
+            draw.text((10, 10), watermark_text, fill=colour, font=font)
+            preview_image.save(full_path, "JPEG")
+            
+            # Store the filename in the session for later use
+            session['preview_image_filename_url'] = full_path 
+            session['preview_image_filename'] = filename
+            return jsonify({"preview_image_filename": filename}), 200
+                
+        elif method == 'full':
+            if not os.path.exists(PHOTO_DIR):
+                os.makedirs(PHOTO_DIR)
+            filename = f"photo_{timestamp}.png"
+            full_path = os.path.join(PHOTO_DIR, filename)
+            with open(full_path, "wb") as file:
+                file.write(image_data)
+                
+            # Generate unique code for the photo
+            chars = string.ascii_uppercase + string.digits
+            unique_code = ''.join(secrets.choice(chars) for _ in range(6))
+            photo_frame = session.get('photo_size')
+            
+            # Save the photo to the database
+            photo = Photo(path="/" + full_path,
+                          filename=f"photo_{timestamp}.png",
+                          unique_code=unique_code,
+                          frame="7 cm x 10 cm" if photo_frame == "frame1" else "14 cm x 10 cm",
+                          date_of_save=datetime.now(UTC) + timedelta(hours=8))  # Timezone adjustment for UTC+8
+            db.session.add(photo)
+            db.session.commit()
+            
+            # Store the filename in the session for later use
+            session['full_image_filename_url'] = full_path 
+            session['full_image_filename'] = filename
+            
+            return jsonify({"full_image_filename": filename}), 200
+        
+    except Exception as e:
+        print(f"❌ Error saving photo: {e}")
         return jsonify({"error": str(e)}), 500
       
     
@@ -293,6 +456,11 @@ def save_image():
         Response: JSON response with the filename of the saved image or an error message.
     """
     try:
+        # Check if the session already has an image filename
+        #if 'full_image_filename' in session:
+        #    print("Image filename already exists in session:", session['full_image_filename'])
+        #    return jsonify({"full_image_filename": session.get("full_image_filename")}), 200
+        
         data = request.get_json()
         image_data = data.get('image')
         
@@ -333,11 +501,22 @@ def save_image():
         draw.text((10, 10), watermark_text, fill=colour, font=font)
         preview_image.save(preview_filename, "JPEG")
         
-        # Store the filename in the session for later use
-        session['image_filename_with_url'] = f"previews/photo_{timestamp}.jpeg" # This is solely for preview purposes
-        session['image_filename'] = f"photo_{timestamp}.png"
+        # Generate unique code for the photo
+        chars = string.ascii_uppercase + string.digits
+        unique_code = ''.join(secrets.choice(chars) for _ in range(6))
+        photo_frame = session.get('photo_size')
         
-        return jsonify({"image_filename": f"photo_{timestamp}.png"}), 200
+        # Save the photo to the database
+        photo = Photo(path="/" + hd_filename, filename=f"photo_{timestamp}.png" , unique_code=unique_code, frame="7 cm x 10 cm" if photo_frame == "frame1" else "14 cm x 10 cm", date_of_save=datetime.now(UTC) + timedelta(hours=8))  # Adjust for timezone if needed
+        db.session.add(photo)
+        db.session.commit()
+        
+        # Store the filename in the session for later use
+        session['preview_image_filename_url'] = preview_filename # This is solely for preview purposes
+        session['full_image_filename_url'] = hd_filename  # This is the HD photo
+        session['full_image_filename'] = f"photo_{timestamp}.png"
+        
+        return jsonify({"full_image_filename": f"photo_{timestamp}.png"}), 200
     
     except Exception as e:
         print(f"❌ Error saving photo: {e}")
@@ -347,13 +526,41 @@ def save_image():
 # Exit function
 @app.route('/exit')
 def exit_app():
-    """Exit the application and clear session data.
+    """Exit the application, clearing data with pending status at this stage, and clear session data.
 
     Returns:
         Response: Redirects to the index page after clearing session data.
     """
+    
+    # Check if the current photo exists with pending status in the database and delete it
+    
+    full_image_filename = session.get('full_image_filename')  # Get the current photo filename from the session
+    full_hd_photo_path = session.get('full_image_filename_url')
+    full_preview_photo_path = session.get('preview_image_filename_url')
+
+    # Process of deleting the photo only for pending status (if the customer leaves the page without payment)
+    current_photo = Photo.query.filter_by(filename=full_image_filename, status=PhotoStatus.PENDING).first()
+    
+    if current_photo:
+        print(f"Current photo found: {current_photo.path}")
+        db.session.delete(current_photo)  # Delete the photo from the database
+        db.session.commit()
+        
+        # Remove the HD photo from the server if it exists
+        if os.path.exists(full_hd_photo_path):
+            os.remove(full_hd_photo_path)
+            print(f"HD photo {full_hd_photo_path} deleted from server.")
+        
+        # Remove the preview photo from the server if it exists
+        if os.path.exists(full_preview_photo_path):
+            os.remove(full_preview_photo_path)
+            print(f"Preview photo {full_preview_photo_path} deleted from server.")
+    
+    # Clear the session data
     clear_session()
     print("Exiting the application and clearing session data..")
+    
+    # Redirect to the index page
     return redirect(url_for('index'))
 
 # Failure function
@@ -368,6 +575,13 @@ def fail():
     
     # Get the payment ID from the request or session
     payment_id = request.args.get("payment_request_id") or session.get("payment_request_id") # or get_last_item_from_store()
+    current_photo = Photo.query.filter_by(filename=session.get('full_image_filename')).first()  # Get the current photo from the database
+    if current_photo:
+        print(f"Current photo found: {current_photo.path}")
+        current_photo.status = PhotoStatus.FAILED
+        db.session.commit()
+    else:
+        print("❌ Current photo not found in database.")
     print(f"Status: '{status}'")        # Debug
     print(f"Payment ID: '{payment_id}'")  # Debug
     if status not in ['canceled', 'failed', 'unknown'] or not payment_id:
@@ -383,6 +597,8 @@ def payment():
     Returns:
         Response: Redirects to the payment summary page after saving the image.
     """
+    
+    # Save the image
     save_image()
     return redirect(url_for('payment_summary'))
 
@@ -412,7 +628,7 @@ def payment_summary():
     session['price'] = price 
     photo_width = session.get('image_width')
     photo_height = session.get('image_height')
-    photo_filename = session.get('image_filename_with_url') 
+    photo_filename = session.get('preview_image_filename_url')  # This is the preview image filename
     
     if photo_width is None or photo_height is None or photo_filename is None:
         print("❌ Missing photo dimensions or filename in session.")
@@ -439,7 +655,7 @@ def create_payment_request():
     
     reference_id = str(uuid.uuid4())
     url = "https://api.sandbox.hit-pay.com/v1/payment-requests"
-    redirect_url = "https://urchin-modest-instantly.ngrok-free.app/redirect"
+    redirect_url = "https://fun-pony-engaging.ngrok-free.app/redirect"
     
     headers = {
         "X-BUSINESS-API-KEY": HITPAY_API_KEY,
@@ -452,15 +668,25 @@ def create_payment_request():
         "currency": "SGD",                                                                          # For testing, use SGD. Other currencies not supported in sandbox
         "purpose": frame_data + " frame photo",                                                     # Description of the payment
         "redirect_url": redirect_url,                                                               # Redirect URL after payment
-        "webhook": "https://urchin-modest-instantly.ngrok-free.app/payment-confirmation/webhook",   # Webhook URL for payment confirmation
+        "webhook": "https://fun-pony-engaging.ngrok-free.app/payment-confirmation/webhook",         # Webhook URL for payment confirmation
         "reference": reference_id,
-        "send_email": True                                                                          # Send email notification
+        "send_email": False                                                                          # Send email notification
     }
 
     response = requests.post(url, headers=headers, data=payload, timeout=10) 
 
     if response.status_code == 201:
         payment_data = response.json()
+        payment_database = Payment(
+            payment_request_id=payment_data.get('id'),
+            status='pending',
+            frame=frame_data,
+            price=float(price), 
+            start_time=datetime.now(UTC) + timedelta(hours=8),
+            end_time=datetime.now(UTC) + timedelta(hours=8) + timedelta(minutes=10) # Set end time to 10 minutes later to avoid null error
+        )
+        db.session.add(payment_database)
+        db.session.commit()
         return payment_data
     else:
         return jsonify({
@@ -480,7 +706,7 @@ def success():
     # Check if the payment was successful
     status = request.args.get("status")
     payment_id = request.args.get("payment_request_id")
-    print(f"Status: '{status}'")        # Debug
+    print(f"Status: '{status}'")                  # Debug
     print(f"Payment Request ID: '{payment_id}'")  # Debug
     
     # Check if the payment status is valid
@@ -488,23 +714,42 @@ def success():
         abort(403)   # Forbidden
         
     # Check that the payment_id exists in session or database
-    valid_payment_id = get_last_item_from_store()  # Example
-    if not payment_id or payment_id != valid_payment_id:
+    if not payment_id or payment_id != session.get('payment_request_id'):
         abort(403)  # Forbidden
            
-    stored_status = get_status(payment_id)  # Check if the payment ID exists in the store
+    #stored_status = get_status(payment_id)  # Check if the payment ID exists in the store
+    stored_payment = Payment.query.filter_by(payment_request_id=payment_id).first()  # Check if the payment ID exists in the database
+    if not stored_payment:
+        print(f"Payment ID {payment_id} not found in database.")
+        return redirect(url_for('fail', payment_request_id=payment_id, status='failed'))
     
-    if not stored_status or stored_status.get("status") != 'succeeded':
+    stored_status = stored_payment.status
+    
+    if not stored_status or stored_status != 'succeeded':
         print(f"Payment ID {payment_id} not found or not succeeded.")
         return redirect(url_for('fail', payment_request_id=payment_id, status='failed'))
         
-    image_filename_with_url = session.get('image_filename_with_url')
-    image_filename = session.get('image_filename')
-    image_url = url_for('static', filename=image_filename_with_url) if image_filename_with_url else None
-    print(f"Image filename: {image_filename}")  # Debug
+    image_filename_with_url = session.get('full_image_filename_url')  # Get the full image filename with URL from the session
+    image_filename = session.get('full_image_filename')
+    image_url = "/" + session.get('full_image_filename_url')  # Get the full image URL from the session
+    preview_image_url = session.get('preview_image_filename_url')  # Get the preview image URL from the session
+    
+    # Check if the image URL is valid
+    current_photo = Photo.query.filter_by(path=image_url).first()  
+    if current_photo:
+        print(f"Current photo found: {current_photo.path}")
+        current_photo.status = PhotoStatus.PAID
+        db.session.commit()
+    else:
+        print("❌ Current photo not found in database.") 
+    print(f"Image URL: {image_url}")  # Debug
+    
+    # Remove the preview image from the server
+    if os.path.exists(preview_image_url):
+        os.remove(preview_image_url)  # Remove the preview image from the server     
     
     if image_url:
-        secure_url = get_secure_image_url(image_filename)
+        secure_url = get_secure_image_url(image_filename, add_expiration=True, download=True)
         print(f"Secure URL generated: {secure_url}")
         qr = qrcode.QRCode(version=1, box_size=6, border=4)
         qr.add_data(secure_url)
@@ -515,13 +760,12 @@ def success():
         buffer = BytesIO()
         img.save(buffer, "PNG")
         buffer.seek(0)
-        #print(f"QR code generated for image: {secure_url}")
         
         # Convert QR code to base64 for embedding in HTML
         qr_base64 = base64.b64encode(buffer.getvalue()).decode('ascii')
         #print(f"QR code base64: {qr_base64}")
         
-    return render_template('success.html', qr_code=qr_base64, index=False)
+    return render_template('success.html', qr_code=qr_base64, index=False, photo=current_photo)
         
 @app.route('/pay', methods=['POST'])
 def pay():
@@ -581,13 +825,19 @@ def webhook():
         print("❌ Invalid signature")
         payment_id = request.json.get('id')
         payment_request_id = request.json.get('payment_request_id')
-        payment_status_store[payment_request_id] = {
-                "payment_id": payment_id,
-                "status": "failed",
-                "timestamp": datetime.now().isoformat()
-        }
-        save_status(payment_request_id, payment_id, 'failed')
-        session[payment_request_id] = payment_request_id
+        #payment_status_store[payment_request_id] = {
+        #        "payment_id": payment_id,
+        ##        "status": "failed",
+        #       "timestamp": datetime.now().isoformat()
+        #}
+        # save_status(payment_request_id, payment_id, 'failed')
+        current_payment = Payment.query.filter_by(payment_request_id=payment_request_id).first()
+        if current_payment:         # Update the payment status in the database
+            current_payment.status = 'failed'
+            current_payment.payment_id = payment_id
+            current_payment.end_time = datetime.now(UTC) + timedelta(hours=8)
+            db.session.commit()
+        session['payment_request_id'] = payment_request_id
         return jsonify({"status": "failed", "message": "Invalid Signature"}), 400
     
     # Extract payment ID and status from the payload
@@ -613,12 +863,19 @@ def webhook():
         if status == 'succeeded':
             print("Payment successful!")
             print(f"Stored payment {payment_id} = {status}")
-            payment_status_store[payment_request_id] = {
-                "payment_id": payment_id,
-                "status": status,
-                "timestamp": datetime.now().isoformat()
-            }
-            save_status(payment_request_id=payment_request_id, payment_id=payment_id, status='succeeded')
+            #payment_status_store[payment_request_id] = {
+            #    "payment_id": payment_id,
+            #    "status": status,
+            #    "timestamp": datetime.now().isoformat()
+            #}
+            # save_status(payment_request_id=payment_request_id, payment_id=payment_id, status='succeeded')
+            current_payment = Payment.query.filter_by(payment_request_id=payment_request_id).first()
+            if current_payment:
+                current_payment.status = status  
+                current_payment.payment_id = payment_id
+                current_payment.end_time = datetime.now(UTC) + timedelta(hours=8)
+                db.session.commit()
+            session['payment_request_id'] = payment_request_id
             return jsonify({"status": "success", "message": "Payment successful"}), 200
         else:
             print("Payment failed or pending.")
@@ -634,15 +891,22 @@ def payment_status():
     payment_request_id = request.args.get('payment_request_id')
     
     if not payment_request_id:
-        return jsonify({"error": "Payment ID is required"}), 400
+        return jsonify({"error": "Payment Request ID is required"}), 400
     
     # Check if the payment ID exists in the store
-    record = payment_status_store.get(payment_request_id)
+    record = Payment.query.filter_by(payment_request_id=payment_request_id).first()  
+    if not record:
+        print(f"Payment Request ID {payment_request_id} not found in database.")
+        return jsonify({"error": "Payment Request ID not found"}), 404
+    
+    # Get the status from the record
     status = None
     if record:
-        status = record.get('status')
+        status = record.status
 
     if status:
+        print(f"Payment ID: {payment_request_id}, Status: {status}")
+        session["payment_request_id"] = payment_request_id
         return jsonify({"payment_request_id": payment_request_id, "status": status}), 200
     else:
         return jsonify({"payment_request_id": payment_request_id, "status": "pending"}), 404    
@@ -651,7 +915,7 @@ def payment_status():
 @app.route('/redirect', methods=['GET'])
 def redirect_user():
     """Redirect user to the success or fail page based on the payment status.
-       This function will be called after the payment is completed from Hitpay.
+       This function will be called after the payment is completed or cancelled from Hitpay.
 
     Returns:
         Response: Rendered HTML template for the redirect page with payment status.
@@ -674,11 +938,72 @@ def redirect_user():
     print("Current selected frame: " + session.get('frame_data'))
     
     # Store payment request ID. This will be used to save the payment status
-    if status_param == 'canceled': 
+    if status_param == 'canceled':
         save_status(payment_request_id=payment_request_id, payment_id='None', status='canceled')
-    
+        current_payment = Payment.query.filter_by(payment_request_id=payment_request_id).first()
+        current_photo = Photo.query.filter_by(filename=session.get('full_image_filename')).first()
+        if current_payment:
+            current_payment.status = 'canceled'
+            current_payment.end_time = datetime.now(UTC) + timedelta(hours=8)
+            db.session.commit()
+            
+        if current_photo:
+            current_photo.status = PhotoStatus.CANCELED
+            db.session.commit()
+  
     print(request.args.to_dict())
     return render_template('redirect.html', payment_request_id=payment_request_id, payment_status=status_param, index=False)
+
+@app.route('/admin/download', methods=['GET'])
+def admin_download():
+    """Render the admin page with payment status store (ADMIN ONLY).
+
+    Returns:
+        Response: Rendered HTML template for the admin page with payment status store.
+    """
+    if session.get("is_admin") != True:
+        return redirect(url_for("admin_login"))
+    
+    return render_template('admin_download.html', index=False)
+
+@app.route('/download', methods=['POST'])
+def download():
+    """Download the HD photo image from customer's unique code (ADMIN ONLY).
+
+    Returns:
+        Response: View the HD photo image as an attachment.
+    """
+    unique_code = request.json.get("unique_code", "").strip().upper()
+    
+    if not unique_code:
+        return jsonify({"error": "Unique Code is Required"}), 400
+    
+    # Query the photo from the database using the unique code
+    photo = Photo.query.filter_by(unique_code=unique_code).first()
+    if not photo:
+        return jsonify({"error": "Photo Not found"}), 404
+    
+    photo_status = photo.status
+    
+    # Check if the photo status is PAID
+    match photo_status:
+        case PhotoStatus.PAID:
+            print(f"Photo with unique code {unique_code} is paid.")
+        case PhotoStatus.EXPIRED:
+            return jsonify({"error": "The Photo has Expired. Unable to Download."}), 403
+        case PhotoStatus.FAILED:
+            return jsonify({"error": "The Photo's Payment Failed. Unable to Download."}), 403
+        case PhotoStatus.CANCELED:
+            return jsonify({"error": "The Photo's Payment was Canceled. Unable to Download."}), 403
+        case _:
+            return jsonify({"error": "Invalid Photo Status. Unable to Download."}), 403
+    
+    # Generate secure URL for the photo
+    photo_filename = photo.filename
+    secure_url = get_secure_image_url(photo_filename, add_expiration=False, download=False)
+    
+    # Send the file as an attachment
+    return jsonify(success=True, url=secure_url) 
 
 # Testing page (Only for development purposes)
 @app.route('/test')
