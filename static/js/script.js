@@ -85,7 +85,8 @@ function showSuccessMessage(title,message) {
 }
 
 // Show confirmation message using SweetAlert2
-function showConfirmationMessage(title, message, confirmMessage, cancelMessage, linkYes) {
+function showConfirmationMessage(title, message, confirmMessage, cancelMessage, linkYes, linkCancel) {
+    linkCancel = linkCancel ?? null; 
     Swal.fire({
         title: title,
         text: message,
@@ -100,7 +101,9 @@ function showConfirmationMessage(title, message, confirmMessage, cancelMessage, 
         if (result.isConfirmed) {
             // User clicked confirm button
             window.location.href = linkYes; // Redirect to home page
-        } 
+        } else if (result.dismiss === Swal.DismissReason.cancel && linkCancel) {
+            window.location.href = linkCancel; // Redirect to cancel page
+        }
     });
 };
 
@@ -219,7 +222,7 @@ function previewPageButtons(photoWidth, photoHeight) {
                   video.style.display = "none";
 
                   // Temporarily here. Remove this when merging uploadButton
-                  `fetch('/save_image', {
+                  fetch('/save_image', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -231,7 +234,7 @@ function previewPageButtons(photoWidth, photoHeight) {
                     .then(res => res.json())
                     .then(data => {
                         console.log('Image saved successfully:', data);
-                    });`
+                    });
                   
                   // Photo buttons
                   retakeButton.style.display = "inline-block";
@@ -242,13 +245,13 @@ function previewPageButtons(photoWidth, photoHeight) {
                     //timerButton.style.display = "none";
                   // timerButton.style.display = "none";
                   setTimeout(() => {
-                    //bottomButtonsContainer.style.display = "flex";
-                    //topButtonsContainer.style.display = "flex";
-                    //bottomButtonsContainer.classList.toggle("hiddenFade");
-                    //topButtonsContainer.classList.toggle("hiddenFade");
-                    //void bottomButtonsContainer.offsetWidth;
-                    //void topButtonsContainer.offsetWidth;
-                    document.getElementById("uploadButton").click();
+                    bottomButtonsContainer.style.display = "flex";
+                    topButtonsContainer.style.display = "flex";
+                    bottomButtonsContainer.classList.toggle("hiddenFade");
+                    topButtonsContainer.classList.toggle("hiddenFade");
+                    void bottomButtonsContainer.offsetWidth;
+                    void topButtonsContainer.offsetWidth;
+                    //document.getElementById("uploadButton").click();
                     }, 1500); 
                   //payButton.style.display = "inline-block";
                   //saveButton.style.display = "inline-block"
@@ -374,12 +377,12 @@ function previewPageButtons(photoWidth, photoHeight) {
                 hideLoading();
                 }
             ).finally(() => {
-                bottomButtonsContainer.style.display = "flex";
-                topButtonsContainer.style.display = "flex";
-                bottomButtonsContainer.classList.toggle("hiddenFade");
-                topButtonsContainer.classList.toggle("hiddenFade");
-                void bottomButtonsContainer.offsetWidth;
-                void topButtonsContainer.offsetWidth;
+                //bottomButtonsContainer.style.display = "flex";
+                //topButtonsContainer.style.display = "flex";
+                //bottomButtonsContainer.classList.toggle("hiddenFade");
+                //topButtonsContainer.classList.toggle("hiddenFade");
+                //void bottomButtonsContainer.offsetWidth;
+                //void topButtonsContainer.offsetWidth;
                 setTimeout(() => {
                     hideLoading();  
                 }, 1500); // Hide loading after 1.5 seconds
@@ -569,7 +572,13 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     if (path === ("/fail")) {
-        showConfirmationMessage("Payment Failed", "Your payment has failed. Please try again.", "Try Again", "Return Home", "/preview")
+        const status = new URLSearchParams(window.location.search).get('status');
+        console.log("Payment status:", status);
+        if (status === "canceled") {
+            showConfirmationMessage("Payment Cancelled", "You have cancelled your payment. Try again?", "Try Again", "Return Home", "/preview", "/exit");
+        } else {
+            showConfirmationMessage("Payment Failed", "Your payment has failed. Please try again.", "Try Again", "Return Home", "/preview", "/exit");
+        }
     }
     
     if (path === ("/preview")) {
