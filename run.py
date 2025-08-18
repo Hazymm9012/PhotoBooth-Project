@@ -7,6 +7,8 @@ if os.environ.get("FLASK_ENV") == "production":
     app = create_app(prodConfig)
 else:
     app = create_app(devConfig)
+    
+import routes.error
 
 if __name__ == "__main__":
     app.run(debug=True, port=8000)

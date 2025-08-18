@@ -1,7 +1,9 @@
 from PIL import Image, ImageTk
 from io import BytesIO
-from flask import session
+from flask import session, current_app, url_for
+from datetime import datetime, timedelta, UTC
 
+import jwt
 import os
 import time
 import base64 
@@ -175,3 +177,29 @@ def create_database_connection(db_url):
             )
     finally:
         conn.close()
+        
+# Generate secure link for the image file
+def get_secure_image_url(filename, add_expiration=True, download=False):
+    """Generate a secure link for the image file using JWT token.
+
+    Args:
+        filename (str): The name of the image file.
+
+    Returns:
+        str: A secure link to access the image file.
+    """
+    payload = {
+        "image_filename": f"{filename}"
+    }
+    
+    if add_expiration:
+        # Set expiration time for the token (10 minutes)
+        payload['exp'] = datetime.now(UTC) + timedelta(minutes=10)
+    
+    # Generate token
+    token = jwt.encode(payload, current_app.config["SECRET_KEY"], algorithm='HS256')
+    token = token if isinstance(token, str) else token.decode("utf-8")
+    
+    # Create a secure link
+    secure_link = url_for('photo.view_secure_image', token=token, download=download, _external=True)
+    return secure_link
