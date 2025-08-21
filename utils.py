@@ -2,7 +2,12 @@ from PIL import Image, ImageTk
 from io import BytesIO
 from flask import session, current_app, url_for
 from datetime import datetime, timedelta, UTC
+from models import Photo, db, PhotoType, PhotoStatus
+from PIL import Image, ImageDraw, ImageFont
 
+import pymysql
+import secrets
+import string
 import jwt
 import os
 import time
@@ -12,7 +17,8 @@ import socket
 import hmac 
 import hashlib
 import re 
-import pymysql
+
+
 from sqlalchemy.engine.url import make_url, URL
 
 
@@ -84,8 +90,10 @@ def encode_image(file_path):
 
 def is_valid_base64(b64_string):
     try:
+        if b64_string.startswith("data:"):
+            b64_string = re.sub(r"^data:[^;]+;base64,", "", b64_string)
         base64.b64decode(b64_string, validate=True)
-        return True
+        return True 
     except Exception:
         return False
     
@@ -203,3 +211,32 @@ def get_secure_image_url(filename, add_expiration=True, download=False):
     # Create a secure link
     secure_link = url_for('photo.view_secure_image', token=token, download=download, _external=True)
     return secure_link
+
+def save_image_to_db(path, image_data, timestamp, method):
+    """Save the image to the database."""
+    if not os.path.exists(os.path.dirname(path)):
+        os.makedirs(os.path.dirname(path))
+    with open(path, "wb") as file:
+        file.write(image_data)
+    print(f"{method.capitalize()} Photo captured and saved as {path}")
+
+    unique_code = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
+    photo_frame = session.get('photo_size')
+    photo = Photo(path="/" + path, filename=f"photo_{timestamp}.png", unique_code=unique_code, type=PhotoType.AI if method == "ai" else PhotoType.ORIGINAL,
+                  frame="7 cm x 10 cm" if photo_frame == "frame1" else "14 cm x 10 cm",
+                  date_of_save=datetime.now(UTC) + timedelta(hours=8))
+    db.session.add(photo)
+    db.session.commit()
+
+def save_preview_image(path, image_data):
+    """Save the preview image with a watermark."""
+    if not os.path.exists(os.path.dirname(path)):
+        os.makedirs(os.path.dirname(path))
+    with open(path, "wb") as file:
+        file.write(image_data)
+    print(f"Preview Photo captured and saved as {path}")
+
+    preview_image = Image.open(path)
+    draw = ImageDraw.Draw(preview_image)
+    draw.text((10, 10), "PREVIEW ONLY", fill=(255, 255, 255), font=ImageFont.load_default(45))
+    preview_image.save(path, "JPEG")

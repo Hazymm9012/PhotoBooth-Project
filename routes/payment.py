@@ -11,9 +11,7 @@ import uuid
 import os
 import secrets
 
-
 bp = Blueprint("payment", __name__)
-
 
 # View payment page
 @bp.route('/payment', methods=['POST'])
@@ -43,6 +41,7 @@ def payment_summary():
     if 'session' not in globals() or 'photo_size' not in session:
         print("❌ No photo size selected in session.")
         abort(404)
+        
     selected_size = session.get('photo_size')
     if selected_size == "frame1":
         frame_data = "7 cm x 10 cm"
@@ -86,7 +85,7 @@ def create_payment_request():
     if not price:
         return jsonify({"error": "Price not found in session"}), 400
     
-    reference_id = str(uuid.uuid4())
+    reference_id = "REF-" + str(uuid.uuid4())[:8].upper()
     url = current_app.config["HITPAY_URL"]                                          # Use the Hitpay URL from the config
     redirect_url = url_for("payment.redirect_user", _external=True)                       # Use the Hitpay redirect URL from the config
     
@@ -102,8 +101,8 @@ def create_payment_request():
         "purpose": frame_data + " frame photo",                                     # Description of the payment
         "redirect_url": redirect_url,                                               # Redirect URL after payment
         "webhook": current_app.config["BASE_URL"] + "/payment-confirmation/webhook",# Webhook URL for payment confirmation
-        "reference": reference_id,
-        "send_email": False                                                         # Send email notification
+        "reference_number": reference_id,
+        "send_email": True                                                         # Send email notification
     }
 
     # Send post request to Hitpay API to create payment request
@@ -113,6 +112,7 @@ def create_payment_request():
         payment_data = response.json()
         payment_database = Payment(
             payment_request_id=payment_data.get('id'),
+            reference_id=reference_id,
             status='pending',
             frame=frame_data,
             price=float(price), 
@@ -163,7 +163,6 @@ def pay():
         return jsonify({"error": "Internal server error", "detail": str(e)}), 500  
     
 
-# Webhook for payment status
 @bp.route('/payment-confirmation/webhook', methods=['POST'])
 def webhook():
     """Handle the Hitpay webhook for payment confirmation.
@@ -186,16 +185,14 @@ def webhook():
     # Verify the Hitpay signature
     if not verify_hitpay_signature(test_data, signature, current_app.config["HITPAY_SALT"]):
         print("❌ Invalid signature")
+        
+        # If the signature is invalid, update the payment status to failed
         payment_id = request.json.get('id')
         payment_request_id = request.json.get('payment_request_id')
-        #payment_status_store[payment_request_id] = {
-        #        "payment_id": payment_id,
-        ##        "status": "failed",
-        #       "timestamp": datetime.now().isoformat()
-        #}
-        # save_status(payment_request_id, payment_id, 'failed')
         current_payment = Payment.query.filter_by(payment_request_id=payment_request_id).first()
-        if current_payment:         # Update the payment status in the database
+        
+        # Update the payment status in the database
+        if current_payment:         
             current_payment.status = 'failed'
             current_payment.payment_id = payment_id
             current_payment.end_time = datetime.now(UTC) + timedelta(hours=8)
@@ -222,27 +219,24 @@ def webhook():
     if payment_id and status:
         print(f"Payment ID: {payment_id}, Status: {status}")
         
-        # If payment is successful, redirect to success page
-        if status == 'succeeded':
-            print("Payment successful!")
-            print(f"Stored payment {payment_id} = {status}")
-            #payment_status_store[payment_request_id] = {
-            #    "payment_id": payment_id,
-            #    "status": status,
-            #    "timestamp": datetime.now().isoformat()
-            #}
-            # save_status(payment_request_id=payment_request_id, payment_id=payment_id, status='succeeded')
-            current_payment = Payment.query.filter_by(payment_request_id=payment_request_id).first()
-            if current_payment:
-                current_payment.status = status  
-                current_payment.payment_id = payment_id
-                current_payment.end_time = datetime.now(UTC) + timedelta(hours=8)
-                db.session.commit()
+        # Update the payment status in the database
+        current_payment = Payment.query.filter_by(payment_request_id=payment_request_id).first()
+        if current_payment:
+            current_payment.status = status  
+            current_payment.payment_id = payment_id
+            current_payment.end_time = datetime.now(UTC) + timedelta(hours=8)
+            db.session.commit()
             session['payment_request_id'] = payment_request_id
-            return jsonify({"status": "success", "message": "Payment successful"}), 200
-        else:
-            print("Payment failed or pending.")
-            return jsonify({"status": "failed", "message": "Payment failed or pending"}), 400
+            
+            if status == 'succeeded':
+                print("Payment successful!")
+                return jsonify({"status": "success", "message": "Payment successful"}), 200
+            elif status == 'refunded':
+                print("Payment refunded.")
+                return jsonify({"status": "refunded", "message": "Payment refunded"}), 200
+        
+        print("Payment failed or pending.")
+        return jsonify({"status": "failed", "message": "Payment failed or pending"}), 400
         
 @bp.route('/payment-status', methods=['GET'])
 def payment_status():
@@ -274,7 +268,6 @@ def payment_status():
     else:
         return jsonify({"payment_request_id": payment_request_id, "status": "pending"}), 404   
     
-# Failure function
 @bp.route('/fail')
 def fail():
     """Handle payment failure by rendering the fail page.
@@ -340,9 +333,8 @@ def success():
         print(f"Payment ID {payment_id} not found or not succeeded.")
         return redirect(url_for('payment.fail', payment_request_id=payment_id, status='failed'))
         
-    image_filename_with_url = session.get('full_image_filename_url')  # Get the full image filename with URL from the session
-    image_filename = session.get('full_image_filename')
-    image_url = "/" + session.get('full_image_filename_url')  # Get the full image URL from the session
+    image_filename = session.get('full_image_ai_filename')
+    image_url = "/" + session.get('full_image_ai_filename_url')  # Get the full image URL from the session
     preview_image_url = session.get('preview_image_filename_url')  # Get the preview image URL from the session
     
     # Check if the image URL is valid
@@ -361,6 +353,7 @@ def success():
     
     qr_base64 = None
     if image_url:
+        # Generate a QR code with a secure URL to the image
         secure_url = get_secure_image_url(image_filename, add_expiration=True, download=True)
         print(f"Secure URL generated: {secure_url}")
         qr = qrcode.QRCode(version=1, box_size=6, border=4)
@@ -375,12 +368,9 @@ def success():
         
         # Convert QR code to base64 for embedding in HTML
         qr_base64 = base64.b64encode(buffer.getvalue()).decode('ascii')
-        #print(f"QR code base64: {qr_base64}")
         
     return render_template('success.html', qr_code=qr_base64, index=False, photo=current_photo)    
 
-
-# Redirect user either success page or failed page
 @bp.route('/redirect', methods=['GET'])
 def redirect_user():
     """Redirect user to the success or fail page based on the payment status.

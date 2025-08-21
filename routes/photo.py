@@ -1,8 +1,8 @@
 from flask import Blueprint, render_template, request, session, redirect, url_for, jsonify, current_app, send_file
-from models import Photo, db, PhotoStatus
+from models import Photo, db, PhotoStatus, PhotoType
 from datetime import datetime, timedelta, UTC
 from PIL import Image, ImageDraw, ImageFont
-from utils import encode_image, encode_image_to_data_url
+from utils import encode_image, encode_image_to_data_url, is_valid_base64, save_image_to_db, save_preview_image
 
 import jwt
 import base64
@@ -83,6 +83,7 @@ def preview():
     if photo_session:
         print("Session photo data found:", photo_session)
         old_photo_size = session.get('old_photo_size')
+        print("Old photo size:", old_photo_size)
         return render_template(
             'preview.html',
             photo_width=photo_width,
@@ -133,8 +134,14 @@ def upload():
         encoded_background_image = encode_image(
             os.path.join("static/images/", data.get("background_filename"))
         )
-        encoded_image = encode_image_to_data_url(data.get("image"))
         
+        # Check if the image is a valid base64 string
+        if is_valid_base64(data.get("image")):
+            encoded_image = encode_image_to_data_url(data.get("image"))
+        else:
+            encoded_image = encode_image(data.get("image"))
+            
+    
         # Retrieve current session requested photo width and height
         photo_size = session.get('photo_size')
         
@@ -200,84 +207,53 @@ def upload():
         return jsonify({"error": str(e)}), 500
     
 # Capture Photo 
-@bp.route('/save_image', methods=['POST'])
-def save_image():
+@bp.route('/save_image/<method>', methods=['POST'])
+def save_image(method):
     """Save the captured image from the request to the server.
 
     Returns:
         Response: JSON response with the filename of the saved image or an error message.
     """
+    method = method.lower()
+    if method not in ['preview', 'full', 'ai']:
+        return jsonify({'error': 'Invalid method specified'}), 400
+
+    data = request.get_json()
+    image_data = data.get('image')
+    if not image_data:
+        return jsonify({'error': 'No Image Provided'}), 400
+
     try:
-        # Check if the session already has an image filename
-        #if 'full_image_filename' in session:
-        #    print("Image filename already exists in session:", session['full_image_filename'])
-        #    return jsonify({"full_image_filename": session.get("full_image_filename")}), 200
-        
-        data = request.get_json()
-        image_data = data.get('image')
-        photo_dir = current_app.config["PHOTO_DIR"]
-        preview_dir = current_app.config["PREVIEW_DIR"]
-        
-        if not image_data:
-            return jsonify({'error': 'No Image Provided'}, 400)
-        
-        try:
-            header, base64_image = image_data.split(',', 1)
-        except ValueError:
-            return jsonify({'error': 'Invalid base64 image format'}), 400
-        
-        if not os.path.exists(photo_dir):
-            os.makedirs(photo_dir)
-            
-        if not os.path.exists(preview_dir): 
-            os.makedirs(preview_dir)
-        
-        image_data = base64.b64decode(base64_image)
-        timestamp = time.strftime("%d%m%Y-%H%M%S")
-        hd_filename = f"{photo_dir}/photo_{timestamp}.png"
-        preview_filename = f"{preview_dir}/photo_{timestamp}.jpeg"
-        
-        with open (hd_filename, "wb") as file:
-            file.write(image_data)
-            
-        with open(preview_filename, "wb") as file:
-            file.write(image_data)
-        
-        print(f"HD Photo captured and saved as {hd_filename}")
-        print(f"Preview Photo captured and saved as {preview_filename}")
-        
-        preview_image = Image.open(preview_filename)
-        draw = ImageDraw.Draw(preview_image)
-        watermark_text = "PREVIEW ONLY"
-        font = ImageFont.load_default(45)
-        colour = (255, 255, 255)
-        
-        draw.text((10, 10), watermark_text, fill=colour, font=font)
-        preview_image.save(preview_filename, "JPEG")
-        
-        # Generate unique code for the photo
-        chars = string.ascii_uppercase + string.digits
-        unique_code = ''.join(secrets.choice(chars) for _ in range(6))
-        photo_frame = session.get('photo_size')
-        
-        # Save the photo to the database
-        photo = Photo(path="/" + hd_filename, filename=f"photo_{timestamp}.png" , unique_code=unique_code, frame="7 cm x 10 cm" if photo_frame == "frame1" else "14 cm x 10 cm", date_of_save=datetime.now(UTC) + timedelta(hours=8))  # Adjust for timezone if needed
-        db.session.add(photo)
-        db.session.commit()
-        
-        # Store the preview photo filename in the session
-        session['preview_image_filename_url'] = preview_filename # This is solely for preview purposes
+        header, base64_image = image_data.split(',', 1)
+    except ValueError:
+        return jsonify({'error': 'Invalid base64 image format'}), 400
+
+    image_data = base64.b64decode(base64_image)
+    timestamp = time.strftime("%d%m%Y-%H%M%S")
+    directories = {
+        'original': current_app.config["ORIGINAL_PHOTO_DIR"],
+        'preview': current_app.config["PREVIEW_DIR"],
+        'ai': current_app.config["AI_GENERATED_PHOTO_DIR"]
+    }
+
+    if method == 'full':
+        save_path = f"{directories['original']}/photo_{timestamp}.png"
+        save_image_to_db(save_path, image_data, timestamp, method)
+        session['full_image_original_filename_url'] = save_path
+        session['full_image_original_filename'] = f"photo_{timestamp}.png"
+        return jsonify({"full_image_original_filename_url": save_path}), 200
+    elif method == 'preview':
+        save_path = f"{directories['preview']}/photo_{timestamp}.jpeg"
+        save_preview_image(save_path, image_data)
+        session['preview_image_filename_url'] = save_path
         session['preview_image_filename'] = f"photo_{timestamp}.jpeg"
-        
-        # Store the HD photo filename in the session
-        session['full_image_filename_url'] = hd_filename  # This is the HD photo
-        session['full_image_filename'] = f"photo_{timestamp}.png"
-        
-        return jsonify({"preview_image_filename_url": preview_filename}), 200
-    
-    except Exception as e:
-        print(f"❌ Error saving photo: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"preview_image_filename_url": save_path}), 200
+    elif method == 'ai':
+        save_path = f"{directories['ai']}/photo_{timestamp}.png"
+        save_image_to_db(save_path, image_data, timestamp, method)
+        session['full_image_ai_filename_url'] = save_path
+        session['full_image_ai_filename'] = f"photo_{timestamp}.png"
+        return jsonify({"full_image_ai_filename_url": save_path}), 200
 
 # Delete current photo
 @bp.route('/delete_photo', methods=['POST'])
@@ -286,36 +262,48 @@ def delete_photo():
     Returns:
         Response: JSON response indicating success or failure of the deletion.
     """
-    full_image_filename = session.get('full_image_filename')
-    full_hd_photo_path = session.get('full_image_filename_url')
-    full_preview_photo_path = session.get('preview_image_filename_url')
-    if not full_image_filename or not full_hd_photo_path or not full_preview_photo_path:
+    full_image_original_filename= session.get('full_image_original_filename')
+    full_image_original_filename_url= session.get('full_image_original_filename_url')
+    full_image_ai_filename_url = session.get('full_image_ai_filename_url')
+    preview_image_filename_url = session.get('preview_image_filename_url')
+    if not full_image_original_filename or not preview_image_filename_url:
         return jsonify({"error": "No photo to delete"}), 400
     try:
-        # Check if the current photo exists in the database and delete it
-        current_photo = Photo.query.filter_by(filename=full_image_filename, status=PhotoStatus.PENDING).first()
+        # Check if the current original photo exists in the database and delete it. No need to query for AI since the original will still exists
+        current_photo_original = Photo.query.filter_by(filename=full_image_original_filename, status=PhotoStatus.PENDING, type=PhotoType.ORIGINAL).first()
         
-        if current_photo:
-            print(f"Current photo found: {current_photo.path}")
-            db.session.delete(current_photo)  # Delete the photo from the database
+        if current_photo_original:
+            print(f"Current photo found: {current_photo_original.path}")
+            db.session.delete(current_photo_original)  # Delete the photo from the database
             db.session.commit()
             
-            # Remove the HD photo from the server if it exists
-            if os.path.exists(full_hd_photo_path):
-                os.remove(full_hd_photo_path)
-                print(f"HD photo {full_hd_photo_path} deleted from server.")
+            # Remove the original photo from the server if it exists
+            if os.path.exists(full_image_original_filename_url):
+                os.remove(full_image_original_filename_url)
+                print(f"Original photo {full_image_original_filename_url} deleted from server.")
             
             # Remove the preview photo from the server if it exists
-            if os.path.exists(full_preview_photo_path):
-                os.remove(full_preview_photo_path)
-                print(f"Preview photo {full_preview_photo_path} deleted from server.")
+            if os.path.exists(preview_image_filename_url):
+                os.remove(preview_image_filename_url)
+                print(f"Preview photo {preview_image_filename_url} deleted from server.")
+            
+            if 'full_image_ai_filename' in session:
+                # Remove the AI-generated photo from the server if it exists
+                if os.path.exists(full_image_ai_filename_url):
+                    os.remove(full_image_ai_filename_url)
+                    print(f"AI photo {full_image_ai_filename_url} deleted from server.")  
+                    
+                # Clear session data related to the photo   
+                session.pop('full_image_ai_filename', None)
+                session.pop('full_image_ai_filename_url', None) 
                 
             # Clear session data related to the photo
-            session.pop('full_image_filename', None)
-            session.pop('full_image_filename_url', None)
+            session.pop('full_image_original_filename', None)
+            session.pop('full_image_original_filename_url', None)
             session.pop('preview_image_filename', None)
             session.pop('preview_image_filename_url', None)
-            
+                
+            print("✅ Photo deleted successfully from database and server.")
             return jsonify({"message": "Photo deleted successfully"}), 200
         else:
             print("❌ Current photo not found in database.")
@@ -341,7 +329,7 @@ def view_secure_image():
         # Decode the token
         payload = jwt.decode(token, current_app.config["SECRET_KEY"], algorithms=['HS256'])
         image_filename = payload.get('image_filename')
-        full_path = os.path.join(current_app.config["PHOTO_DIR"], image_filename)
+        full_path = os.path.join(current_app.config["AI_GENERATED_PHOTO_DIR"], image_filename)
         
         # Check if the image exists
         if not full_path or not os.path.exists(full_path):
@@ -354,3 +342,42 @@ def view_secure_image():
         return "Token has expired", 403
     except jwt.InvalidTokenError:
         return "Invalid token", 403
+
+@bp.route('/update_old_photo_status', methods=['POST'])
+def old_photo_size_status():
+    """Remove the status of the old photo size in the session.
+
+    Returns:
+        Response: JSON response indicating success or failure of the update.
+    """
+    old_photo_size = session.get('old_photo_size')
+    
+    if not old_photo_size:
+        print("❌ No old photo size found in session.")
+        return jsonify({"error": "No old photo size found"}), 400
+    
+    # Update the status of the old photo size
+    try:
+        print(f"Updating status for old photo size: {old_photo_size}")
+        
+        # Clear the old photo size from the session
+        session.pop('old_photo_size', None)
+        
+        return jsonify({"message": "Old photo size status updated successfully"}), 200
+    except Exception as e:
+        print(f"❌ Error removing old photo size status: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@bp.route('/get_full_original_filename_url', methods=['GET'])
+def get_full_original_filename_url():
+    """Get the full original filename URL from the session. Used in upload process to ChatGPT API.
+
+    Returns:
+        Response: JSON response containing the full original filename URL or an error message.
+    """
+    full_image_filename_url = session.get('full_image_original_filename_url')
+    
+    if not full_image_filename_url:
+        return jsonify({"error": "No full image filename URL found in session"}), 404
+    
+    return jsonify({"full_image_filename_url": full_image_filename_url}), 200

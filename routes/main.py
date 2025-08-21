@@ -48,27 +48,43 @@ def exit_app():
     
     # Check if the current photo exists with pending status in the database and delete it
     
-    full_image_filename = session.get('full_image_filename')  # Get the current photo filename from the session
-    full_hd_photo_path = session.get('full_image_filename_url')
-    full_preview_photo_path = session.get('preview_image_filename_url')
+    full_image_original_filename = session.get('full_image_original_filename')  # Get the current photo filename from the session
+    full_image_original_filename_url = session.get('full_image_original_filename_url')
+    preview_image_filename_url = session.get('preview_image_filename_url')
+    full_image_ai_filename_url = session.get('full_image_ai_filename_url')
+    full_image_ai_filename = session.get('full_image_ai_filename')  # Get the current photo filename from the session
+    
 
     # Process of deleting the photo only for pending status (if the customer leaves the page without payment)
-    current_photo = Photo.query.filter_by(filename=full_image_filename, status=PhotoStatus.PENDING).first()
+    current_photo_original = Photo.query.filter_by(filename=full_image_original_filename, status=PhotoStatus.PENDING).first()
     
-    if current_photo:
-        print(f"Current photo found: {current_photo.path}")
-        db.session.delete(current_photo)  # Delete the photo from the database
+    if current_photo_original:
+        print(f"Current photo found: {current_photo_original.path}")
+        db.session.delete(current_photo_original)  # Delete the photo from the database
         db.session.commit()
         
         # Remove the HD photo from the server if it exists
-        if os.path.exists(full_hd_photo_path):
-            os.remove(full_hd_photo_path)
-            print(f"HD photo {full_hd_photo_path} deleted from server.")
+        if os.path.exists(full_image_original_filename_url):
+            os.remove(full_image_original_filename_url)
+            print(f"HD photo {full_image_original_filename_url} deleted from server.")
         
         # Remove the preview photo from the server if it exists
-        if os.path.exists(full_preview_photo_path):
-            os.remove(full_preview_photo_path)
-            print(f"Preview photo {full_preview_photo_path} deleted from server.")
+        if os.path.exists(preview_image_filename_url):
+            os.remove(preview_image_filename_url)
+            print(f"Preview photo {preview_image_filename_url} deleted from server.")
+    
+    # Process of deleting the AI photo only for pending status (if the customer leaves the page without payment)
+    current_photo_ai = Photo.query.filter_by(filename=full_image_ai_filename, status=PhotoStatus.PENDING).first()
+    
+    if current_photo_ai:
+        print(f"Current AI photo found: {current_photo_ai.path}")
+        db.session.delete(current_photo_ai)
+        db.session.commit()
+        
+        # Remove the AI photo from the server if it exists
+        if os.path.exists(full_image_ai_filename_url):
+            os.remove(full_image_ai_filename_url)
+            print(f"AI photo {full_image_ai_filename_url} deleted from server.")
     
     # Clear the session data
     clear_session()

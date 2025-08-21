@@ -4,7 +4,6 @@
 
 {% block content %}
     <script src="https://sandbox.hit-pay.com/hitpay.js"></script>
-    <script src="{{ url_for('static', filename='js/hitpay.js') }}" defer></script>
     <body id="photo-preview">
     <div id="loading-text" class="loading-text" style="display: none">Please Wait ...</div>
     <div id="loading-element" class="loader" style="display: none"></div> 
@@ -34,39 +33,39 @@
                 <audio id="shutter-sound" src="/static/audio/camera-shutter-6305.mp3" preload="auto"></audio>
             </div>
             <div class="container-button-bottom" id="container-button-bottom">
-                    <button class="frame-button" id="paymentButton" style="display: none">
+                    <button class="preview-button" id="paymentButton" style="display: none">
                         <i class="fas fa-shopping-cart"></i>
                     </button>
                     <div class="menu-container" id="timer-container-buttons">
                         <input type="checkbox" id="menu-toggler" class="menu-toggler" hidden>
                         <div class="container">
-                            <button class="timer-toggle-btn frame-button">
+                            <button class="timer-toggle-btn preview-button">
                                 <i class="fa-solid fa-clock"></i>
                             </button>
                         </div>
                         <ul class="menu-list">
                             <li class="menu-item">
-                                <a href="javascript:void(0)" onClick="setTimer(0, this)">⏱ Timer Off</a>
+                                <a href="javascript:void(0)" data-time="0">⏱ Timer Off</a>
                             </li>
                             <li class="menu-item">
-                                <a href="javascript:void(0)" onClick="setTimer(3, this)">⏱ 3 s</a>
+                                <a href="javascript:void(0)" data-time="3">⏱ 3 s</a>
                             </li>
                             <li class="menu-item selected">
-                                <a href="javascript:void(0)" onClick="setTimer(5, this)">⏱ 5 s</a>
+                                <a href="javascript:void(0)" data-time="5">⏱ 5 s</a>
                             </li>
                             <li class="menu-item">
-                                <a href="javascript:void(0)" onClick="setTimer(10, this)">⏱ 10 s</a>
+                                <a href="javascript:void(0)" data-time="10">⏱ 10 s</a>
                             </li>
                         </ul>
                     </div>
-                    <button class="frame-button" id="captureButton">
+                    <button class="preview-button" id="captureButton">
                         <i class="fas fa-camera"></i>
                     </button>
-                    <button class="frame-button" id="retakeButton" style="display: none">
-                        <i class="fas fa-redo"></i>
+                    <button class="preview-button" id="retakeButton" style="display: none">
+                        <i class="fa-solid fa-arrows-rotate"></i>
                     </button>
-                    <button class="frame-button" id="uploadButton" style="display: none">
-                        <i class="fas fa-filter"></i>
+                    <button class="preview-button" id="uploadButton" style="display: none">
+                        <i class="fa-solid fa-file-image"></i>
                     </button>
                 <!--<button class="frame-button" id="timerButton">
                     <i class="fa-solid fa-clock"></i>

@@ -337,6 +337,30 @@ h3 {
   transform: scale(1.00);
 }
 
+.preview-button {
+  color: white;
+  font-family: "Chewy", system-ui;
+  width: 80px;
+  height: 80px;
+  padding: 20px 40px;
+  font-size: 3.5em;
+  font-weight: 500;
+  margin: 20px;
+  text-shadow: 3px 3px 4px rgba(0, 0, 0, 0.5);
+  background: linear-gradient(120deg, #000000, #b1b1b1);
+  transition: background-color 0.3s ease, transform 0.3s ease;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.preview-button i {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.2em;   /* fixed square box */
+  height: 1.4em;
+}
+
 .countdown {
   position: absolute;
   font-size: 6rem;
@@ -553,7 +577,6 @@ h3 {
 }
 
 /* position the toggle button */
-
 
 .timer-toggle-btn i {
   transition: 0.5s;

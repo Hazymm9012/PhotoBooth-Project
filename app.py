@@ -6,8 +6,7 @@ from routes.photo import bp as photo_bp
 from routes.payment import bp as payment_bp
 from extensions import db, migrate
 from config import Config
-from models import *
-    
+from models import *   
 
 def create_app(config_class=Config):
     """
@@ -28,7 +27,6 @@ def create_app(config_class=Config):
     with app.app_context():
         db.create_all()                         # Create database tables if they do not exist
         print("Models mapped:", list(db.metadata.tables.keys()))
-    
     
     # Register blueprints for different parts of the application
     app.register_blueprint(main_bp)     # Register main blueprint

@@ -27,7 +27,8 @@ class Config:
     ALLOWED_IPS = ['202.168.65.122', '127.0.0.1']
 
     # Constants and global variables
-    PHOTO_DIR = 'full_photos'
+    ORIGINAL_PHOTO_DIR = 'full_original_photos'
+    AI_GENERATED_PHOTO_DIR = 'full_AI_Photos'
     PREVIEW_DIR = 'static/preview_photos'
     
     # Hitpay links
