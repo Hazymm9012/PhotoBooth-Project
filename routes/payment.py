@@ -279,7 +279,7 @@ def fail():
     
     # Get the payment ID from the request or session
     payment_id = request.args.get("payment_request_id") or session.get("payment_request_id") # or get_last_item_from_store()
-    current_photo = Photo.query.filter_by(filename=session.get('full_image_filename')).first()  # Get the current photo from the database
+    current_photo = Photo.query.filter_by(filename=session.get('full_image_ai_filename')).first()  # Get the current photo from the database
     if current_photo:
         print(f"Current photo found: {current_photo.path}")
         

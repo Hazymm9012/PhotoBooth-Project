@@ -5,3 +5,5 @@ __pycache__/utils.cpython-312.pyc
 static/photos
 .DS_Store
 templates/test.html
+db.py
+config/db2_credentials.json

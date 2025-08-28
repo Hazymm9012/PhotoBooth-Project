@@ -57,6 +57,7 @@ def download():
     """
     unique_code = request.json.get("unique_code", "").strip().upper()
     
+    # Check if unique code is provided
     if not unique_code:
         return jsonify({"error": "Unique Code is Required"}), 400
     
@@ -77,6 +78,8 @@ def download():
             return jsonify({"error": "The Photo's Payment Failed. Unable to Download."}), 403
         case PhotoStatus.CANCELED:
             return jsonify({"error": "The Photo's Payment was Canceled. Unable to Download."}), 403
+        case PhotoStatus.PENDING:
+            return jsonify({"error": "The Photo is still Pending Payment. Unable to Download."}), 403
         case _:
             return jsonify({"error": "Invalid Photo Status. Unable to Download."}), 403
     

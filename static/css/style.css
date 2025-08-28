@@ -361,6 +361,21 @@ h3 {
   height: 1.4em;
 }
 
+.preview-button:hover {
+  transform: scale(1.05);
+}
+
+.preview-button:active {
+  transform: scale(0.90);
+}
+
+.preview-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+  transition: none;
+}
+
 .countdown {
   position: absolute;
   font-size: 6rem;

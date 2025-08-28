@@ -25,7 +25,8 @@ import {
     toggleFlash,
     selectedTimer,
     showConfirmationMessage,
-    fetchFullImageUrl
+    fetchFullImageUrl,
+    showAlertWithAction
 } from './utils.js';
 
 // Function to handle preview page buttons and camera functionality
@@ -193,7 +194,7 @@ async function captureButtonHandler() {
                 }
                 throw new Error(`Save failed: ${msg || `HTTP ${oriRes.status}`}`);
             }
-    
+
             const savedOri = await oriRes.json();
             if (!savedOri?.full_image_original_filename_url) {
                 throw new Error('Save response missing full_image_original_filename_url');
@@ -217,7 +218,7 @@ async function captureButtonHandler() {
                 }
                 throw new Error(`Save failed: ${msg || `HTTP ${previewRes.status}`}`);
             }
-    
+
             const savedPreview = await previewRes.json();
             if (!savedPreview?.preview_image_filename_url) {
                 throw new Error('Save response missing preview_image_filename_url');
@@ -232,13 +233,13 @@ async function captureButtonHandler() {
             timerContainerButtons.style.display = 'none';
 
             setTimeout(() => {
-                bottomButtonsContainer.style.display = 'flex';
-                topButtonsContainer.style.display = 'flex';
-                bottomButtonsContainer.classList.toggle('hiddenFade');
-                topButtonsContainer.classList.toggle('hiddenFade');
-                void bottomButtonsContainer.offsetWidth;
-                void topButtonsContainer.offsetWidth;
-                //document.getElementById("uploadButton").click();  // Auto-upload function
+                //bottomButtonsContainer.style.display = 'flex';
+                //topButtonsContainer.style.display = 'flex';
+                //bottomButtonsContainer.classList.toggle('hiddenFade');
+                //topButtonsContainer.classList.toggle('hiddenFade');
+                //void bottomButtonsContainer.offsetWidth;
+                //void topButtonsContainer.offsetWidth;
+                document.getElementById("uploadButton").click();  // Auto-upload function
             }, 1500);
 
             // Stop the video stream
@@ -393,20 +394,25 @@ async function uploadButtonHandler() {
 
         photo.src = previewAiData.preview_image_filename_url;
         photo.style.display = 'block';
-    } catch (error) {
-        showAlertMessage('Error: ' + error.message);
-        console.error('Upload flow error:', error);
-        hideLoading();
-    } finally {
         // Reset the buttons visibility
-        // retakeButton.style.display = 'inline-block';
-        // uploadButton.style.display = 'none';
-        // captureButton.style.display = 'none';
-        // paymentButton.style.display = 'inline-block';
-        // countdownEl.classList.add('hidden');
-        // countdownButton.disabled = false;
+    } catch (error) {
+        hideLoading();
+        showAlertWithAction('Error: ' + error.message);
+        console.error('Error during upload:', error);
+    } finally {
+        bottomButtonsContainer.style.display = 'flex';
+        topButtonsContainer.style.display = 'flex';
+        bottomButtonsContainer.classList.toggle('hiddenFade');
+        topButtonsContainer.classList.toggle('hiddenFade');
+        void bottomButtonsContainer.offsetWidth;
+        void topButtonsContainer.offsetWidth;
+        retakeButton.style.display = 'inline-block';
+        uploadButton.style.display = 'block';
+        captureButton.style.display = 'none';
+        paymentButton.style.display = 'inline-block';
+        countdownEl.classList.add('hidden');
+        countdownButton.disabled = false;
     }
-
 }
 
 function paymentButtonHandler() {

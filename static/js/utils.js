@@ -1,4 +1,4 @@
-import {flash} from './dom.js';
+import {flash, retakeButton} from './dom.js';
 export let selectedTimer = null; // Initialize selected timer
 
 // Set the selected timer when a menu item is clicked
@@ -43,6 +43,22 @@ export function showAlertMessage(message) {
         text: message,
         scrollbarPadding: false,
     });
+}
+
+// Only used for error on preview message
+export async function showAlertWithAction(message) {
+    const result = await Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: message,
+        scrollbarPadding: false,
+    });
+
+    // result.isConfirmed will be true if user pressed OK
+    if (result.isConfirmed) {
+        retakeButton.click(); // Trigger retake button click
+    }
+
 }
 
 // Show success message using SweetAlert2

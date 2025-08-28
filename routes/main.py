@@ -47,7 +47,6 @@ def exit_app():
     """
     
     # Check if the current photo exists with pending status in the database and delete it
-    
     full_image_original_filename = session.get('full_image_original_filename')  # Get the current photo filename from the session
     full_image_original_filename_url = session.get('full_image_original_filename_url')
     preview_image_filename_url = session.get('preview_image_filename_url')
