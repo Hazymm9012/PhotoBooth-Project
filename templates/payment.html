@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Welcome | Photo Booth{% endblock %}
+
+{% block content %}
+<div id="blur-overlay"></div>
+<div id="loading-text" class="loading-text" style="display: none">Please Wait ...</div>
+<div id="loading-element" class="loader" style="display: none"></div>
+<a class="exit-button" id="exitButton">
+    <i class="fa fa-sign-out"></i>
+</a>
+<a onClick="history.back()" class="back-button">
+    <i class="fas fa-arrow-left"></i> Back
+</a>
+<div class="container-payment-summary">
+    <div class="container-image-summary" style="width: {{photo_width}}; height: {{photo_height}};">
+        <img id="photo-summary" class="image-frame-summary" oncontextmenu="return false;" src="{{ photo_filename }}">
+    </div>
+    <div class="container-payment">
+        <h1><strong>Payment Summary</strong></h1>
+        <br>
+        <p id="payment-text">You will receive a QR code to download the image and a unique code to print the image.</p>
+        <h3><strong>Photo Frame:</strong> {{ frame_data }}</h3>
+        <h3><strong>Price:</strong> RM {{ price }}</h3>
+        <button id="payButton" class="frame-button">Pay Now</button>
+    </div>
+</div>
+
+{% endblock %}

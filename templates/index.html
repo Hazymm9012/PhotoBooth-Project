@@ -3,9 +3,10 @@
 {% block title %}Welcome | Photo Booth{% endblock %}
 
 {% block content %}
-    <h1>Welcome to the PhotoBooth App </h1>
+    <h1 class="fade-in">Welcome to the PhotoBooth App </h1>
     <div class="container">
-        <button id="startButton" class="tapToStart" onClick="window.location.href='/choose_size'"> 📸 Tap to Start</button>
+        <button class="tapToStart animate__bounceIn" id="tapToStart" onClick="window.location.href='/choose_size'">
+            <i class="fas fa-camera"> Tap To Start</i>
+        </button>
     </div>    
-        
 {% endblock %}

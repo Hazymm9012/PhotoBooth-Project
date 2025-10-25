@@ -3,31 +3,81 @@
 {% block title %}Welcome | Photo Booth{% endblock %}
 
 {% block content %}
+    <script src="https://sandbox.hit-pay.com/hitpay.js"></script>
     <body id="photo-preview">
+    <div id="loading-text" class="loading-text" style="display: none">Please Wait ...</div>
+    <div id="loading-element" class="loader" style="display: none"></div> 
+    <div id="countdown" class="countdown">5</div>
     <div id="blur-overlay"></div>
     <div id="photo-settings"
      data-photo-width="{{ photo_width }}"
-     data-photo-height="{{ photo_height }}"></div>
+     data-photo-height="{{ photo_height }}"
+     data-photo-session="{{ photo_session }}"
+     data-old-photo-size="{{ old_photo_size }}"></div>
     <div id="page-content">
-        <div class="container">
+        <div id="container-button-top" class="container-button-top">
+            <a class="exit-button" id="exitButton">
+                <i class="fa fa-sign-out"></i>
+            </a>
+            <a onClick="history.back()" class="back-button">
+                <i class="fas fa-arrow-left"></i> Back
+            </a>
+        </div>
+        <div class="container-wrapper">
             <div class="container-image">
-                <video id="video" autoplay></video>
-                <div id="countdown" class="hidden">5</div>
-                <img id="photo" class="image-frame" style="display: none"/>
+                <video id="video" class="responsive-image" oncontextmenu="return false;" preload="metadata" autoplay ></video>
+                <div id="flash" aria-hidden="true"></div>
+                <img id="photo" class="responsive-image" style="display: none" oncontextmenu="return false;"/>
                 <canvas id="canvas" style="display: none"></canvas>
+                <audio id="beep-sound" src="/static/audio/timer_countdown_5_secs.mp3" preload="auto"></audio>
+                <audio id="shutter-sound" src="/static/audio/camera-shutter-6305.mp3" preload="auto"></audio>
+            </div>
+            <div class="container-button-bottom" id="container-button-bottom">
+                    <button class="preview-button" id="paymentButton" style="display: none">
+                        <i class="fas fa-shopping-cart"></i>
+                    </button>
+                    <div class="menu-container" id="timer-container-buttons">
+                        <input type="checkbox" id="menu-toggler" class="menu-toggler" hidden>
+                        <div class="container">
+                            <button class="timer-toggle-btn preview-button">
+                                <i class="fa-solid fa-clock"></i>
+                            </button>
+                        </div>
+                        <ul class="menu-list">
+                            <li class="menu-item">
+                                <a href="javascript:void(0)" data-time="0">⏱ Timer Off</a>
+                            </li>
+                            <li class="menu-item">
+                                <a href="javascript:void(0)" data-time="3">⏱ 3 s</a>
+                            </li>
+                            <li class="menu-item selected">
+                                <a href="javascript:void(0)" data-time="5">⏱ 5 s</a>
+                            </li>
+                            <li class="menu-item">
+                                <a href="javascript:void(0)" data-time="10">⏱ 10 s</a>
+                            </li>
+                        </ul>
+                    </div>
+                    <button class="preview-button" id="captureButton">
+                        <i class="fas fa-camera"></i>
+                    </button>
+                    <button class="preview-button" id="retakeButton" style="display: none">
+                        <i class="fa-solid fa-arrows-rotate"></i>
+                    </button>
+                    <button class="preview-button" id="uploadButton" style="display: none">
+                        <i class="fa-solid fa-file-image"></i>
+                    </button>
+                <!--<button class="frame-button" id="timerButton">
+                    <i class="fa-solid fa-clock"></i>
+                </button>-->
+                <button id="stopButton" style="display: none"> Stop Camera - DEBUG ONLY</button> 
+                <button id="startButton" style="display: none"> Start Camera - DEBUG ONLY</button> 
+                <button id="loadingButton" style="display: none">Loading button - DEBUG ONLY</button>
+                <!--<button id="saveButton" style="display: none">Save Photo - DEBUG ONLY</button>-->
+                <button id="countdownButton" style="display: none">Start Countdown - DEBUG ONLY</button>
+                <!--<button onClick="onClickPay()">Show Drop-In</button>-->
+                <!--<button id="generateQRCode">Generate QR Code - DEBUG ONLY</button>-->
             </div>
         </div>        
-        <div class="container-button">
-            <button id="retakeButton" class="frame-button" style="display: none">Retake</button>
-            <button id="captureButton" class="frame-button">Capture</button>
-            <button id="uploadButton" style="display: none">Apply AI Filter - DEBUG ONLY</button>
-            <button id="stopButton"> Stop Camera - DEBUG ONLY</button> 
-            <button id="startButton"> Start Camera - DEBUG ONLY</button> 
-            <button id="loadingButton">Loading button - DEBUG ONLY</button>
-            <button id="saveButton" style="display: none">Save Photo - DEBUG ONLY</button>
-            <div id="loading-text" class="loading-text" style="display: none">Please Wait ...</div>
-            <div id="loading-element" class="loading-element" style="display: none"></div>
-        </div>
     </div>
-
 {% endblock %}

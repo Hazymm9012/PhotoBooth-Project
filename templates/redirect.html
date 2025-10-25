@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Processing Payment</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f5f5f5;
+        }
+        .loading-container {
+            text-align: center;
+        }
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .status-message {
+            margin-top: 20px;
+            font-size: 18px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-container">
+        <div class="loading-spinner"></div>
+        <div class="status-message">Verifying your payment...</div>
+        <div class="status-message">Please wait while we redirect you...</div>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const currentStatus = urlParams.get('status');
+        const paymentRequestId = "{{payment_request_id}}";
+
+        // If the payment is canceled, redirect to fail page after 3 seconds
+        // This is to avoid waiting result from webhook, since hitpay does not respond with canceled payment
+        if (currentStatus == 'canceled') {
+            setTimeout(() => {
+                window.location.href = `/fail?payment_request_id=${encodeURIComponent(paymentRequestId)}&status=${encodeURIComponent(currentStatus)}`
+            }, 3000)
+        } else {
+            // If the payment status is not canceled, wait for the payment status to be updated
+            waitForPaymentStatus(paymentRequestId, function(newStatus) {
+                let redirectUrl;
+                switch(newStatus) {
+                    case 'succeeded':
+                        redirectUrl = `/success?payment_request_id=${encodeURIComponent(paymentRequestId)}&status=${encodeURIComponent(newStatus)}`;
+                        break;
+                    case 'failed':
+                        redirectUrl = `/fail?payment_request_id=${encodeURIComponent(paymentRequestId)}&status=${encodeURIComponent(newStatus)}`;
+                        break;
+                    // Just in case, the system breaks    
+                    case 'canceled':
+                        redirectUrl = `/fail?payment_request_id=${encodeURIComponent(paymentRequestId)}&status=${encodeURIComponent(newStatus)}`;
+                        break;
+                    default:
+                        redirectUrl = `/fail?payment_request_id=${encodeURIComponent(paymentRequestId)}&status=unknown`;
+                }
+                //console.log(`Redirecting to: ${redirectUrl}`);
+                // Redirect to the appropriate page based on the payment status
+                window.location.href = redirectUrl;
+            });
+        }
+
+        function waitForPaymentStatus(paymentRequestId, callback) {
+            const pollInterval = 2000; // 2 second
+            const maxAttempts = 10; // 10 seconds max or 5 attempts (only for development)
+            let attempts = 0;
+          
+            const poll = setInterval(() => {
+              fetch(`/payment-status?payment_request_id=${encodeURIComponent(paymentRequestId)}`)
+                .then(response => response.json())
+                .then(data => {
+                  if (data.status === 'succeeded' || data.status === 'failed' || data.status === 'canceled') {
+                    clearInterval(poll);
+                    callback(data.status);
+                  } else if (++attempts >= maxAttempts) {
+                    clearInterval(poll);
+                    console.warn('Assuming canceled due to timeout');
+                    callback('unknown');  // fallback assumption
+                  }
+                })
+                .catch(err => {
+                  console.error('Error checking status:', err);
+                });
+            }, pollInterval);
+        }
+
+    </script>
+</body>
+</html>
