@@ -141,7 +141,7 @@ source venv/bin/activate
 ```
 ### Step 3: Install dependencies
 ```bash
-pip install -r requirement.txt
+pip install -r requirements.txt
 ```
 
 ## Configuration
