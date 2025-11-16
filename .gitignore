@@ -7,3 +7,7 @@ static/photos
 templates/test.html
 db.py
 config/db2_credentials.json
+install_requirements.py
+payment_status_store.py
+payment_status_store.json
+db.py

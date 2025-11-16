@@ -24,6 +24,18 @@ from sqlalchemy.engine.url import make_url, URL
 
 # Load image from file and convert to data URI
 def load_image_as_data_uri(image_path):
+    """Load an image from the specified file path and convert it to a base64 data URI.
+
+    Args:
+        image_path (str): The file path of the image to be loaded.
+
+    Raises:
+        FileNotFoundError: If the image file does not exist.
+        Exception: If the image file cannot be found or read.
+
+    Returns:
+        str: A base64 encoded data URI of the image.
+    """
     try:
         with open(image_path, "rb") as file:
             encoded = base64.b64encode(file.read()).decode("utf-8")
@@ -35,12 +47,28 @@ def load_image_as_data_uri(image_path):
     
 
 def pil_to_base64(pil_image):
+    """Convert a PIL Image to a base64 encoded string.
+
+    Args:
+        pil_image (Image): PIL Image object.
+
+    Returns:
+        str: Base64 encoded string of the image.
+    """
     buffer = BytesIO()
     pil_image.save(buffer, format="png")
     img_str = base64.b64encode(buffer.getvalue()).decode()
     return "data:image/jpeg;base64," + img_str
 
 def read_image_from_folder(file_name):
+    """Read image from static/images/ folder and return as PIL Image.
+
+    Args:
+        file_name (str): name of the image file.
+
+    Returns:
+        Image: PIL Image object.
+    """
     try:
         image_path = os.path.join("static/images/", file_name)
         image = Image.open(image_path)
@@ -53,6 +81,14 @@ def read_image_from_folder(file_name):
         return None
 
 def read_image_from_base64(json_img_str):
+    """Read image from base64 string and return as PIL Image.
+
+    Args:
+        json_img_str (str): base64 string of the image.
+
+    Returns:
+        Image: PIL Image object.
+    """
     if json_img_str.startswith("data:image"):
         json_img_str = json_img_str.split(",", 1)[1]  # remove data URL prefix
     image_data = base64.b64decode(json_img_str)
@@ -84,11 +120,27 @@ def stitch_images(image_a, image_b, spacing=10, bg_color=(255, 255, 255)):
     return composite
 
 def encode_image(file_path):
+    """Encode an image file to a base64 string.
+
+    Args:
+        file_path (str): The path to the image file.
+
+    Returns:
+        str: Base64 encoded string of the image.
+    """
     with open(file_path, "rb") as f:
         base64_image = base64.b64encode(f.read()).decode("utf-8")
     return base64_image
 
 def is_valid_base64(b64_string):
+    """Check if a string is a valid base64 encoded string.
+
+    Args:
+        b64_string (str): The base64 string to validate.
+
+    Returns:
+        bool: True if valid base64, False otherwise.
+    """
     try:
         if b64_string.startswith("data:"):
             b64_string = re.sub(r"^data:[^;]+;base64,", "", b64_string)
@@ -98,6 +150,15 @@ def is_valid_base64(b64_string):
         return False
     
 def encode_image_to_data_url(base64_str, format="PNG"):
+    """Encode a base64 string to a specific image format and return as base64 string.
+
+    Args:
+        base64_str (str): base64 string of the image.
+        format (str): image format to encode to (default: "PNG").
+
+    Returns:
+        encoded (str): encoded base64 string of the image in specified format.
+    """
     if base64_str.startswith("data:image"):
         base64_str = base64_str.split(",", 1)[1]
     image_data = base64.b64decode(base64_str)

@@ -33,6 +33,11 @@ def admin_login():
 # Admin logout route
 @bp.get("/admin/logout")
 def admin_logout():
+    """Admin logout route to clear the session and redirect to login page.
+
+    Returns:
+        Response: Redirect to the admin login page.
+    """
     session.clear()
     return redirect(url_for("admin.admin_login"))
 
