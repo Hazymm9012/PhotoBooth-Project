@@ -69,7 +69,7 @@ photobooth-project/
     audio/                      # Store sound effect
     css/                        # CSS configuration
     images/                     # Store static images for the app    
-    preview_photos/             # Store low quality AI-generated image(temporary)
+    preview_photos/             # Store low quality AI-generated image(Auto Generate)
     js/                         # JavaScript             
   templates/                    # HTML templates
     403.html
@@ -92,8 +92,8 @@ photobooth-project/
     Home Page-Image.png
     Preview-Image.png
     Success-Image.png
-  full_AI_Photos/             # Store all AI-generated Photos
-  full_original_photos/       # Store all Original Photos
+  full_AI_Photos/             # Store all AI-generated Photos (Auto Generate)
+  full_original_photos/       # Store all Original Photos (Auto Generate)
   .gitignore
   README.md
   requirements.txt            # A list of dependencies required
@@ -104,7 +104,7 @@ photobooth-project/
   run.py                      # Run the app 
   utils.py                    # Helper functions
 ```
-
+> **Note**: Folders with `Auto Generate` will automatically generated when the app is saving photos taken/generated if the folders are not found.
 ---
 ## Screenshots
 
@@ -217,6 +217,17 @@ FLASK_ENV=production
 - `Payment` is used to store payment information for payment verfication purpose. Payment status is updated using webhook. 
 - `Photo` is used to store photos information for retrieval purpose using the QR code and 6-digit code.
 
+### 7. Admin System
+- The admin system can be accessed using this URL link: `BASE_URL`/admin/login
+- Admin username and password are set up in environment variables.
+- The menu only allows downloading any images via 6-digit code for now.
+- The system only allows downloading purchased photos. Any incomplete or failed payment of the photos cannot be retrieved for security purpose. 
+
+### 8. Additional Information
+- Any incomplete tasks while using the app will automatically delete taken photos or images generated for security purpose.
+- The app is designed specifically for kiosk with big screen.
+- Server's IP Address needs to be whitelisted to deploy the app.
+
 ---
 ## Limitations & Future Improvements
 - Currently requires valid API keys (HitPay and optional AI image API) to run end-to-end.
@@ -224,6 +235,7 @@ FLASK_ENV=production
   - A full admin interface. Currently, the admin interface only allows downloading the image via the 6-digit code for printing purpose.
   - A full integrated printing system with printing interface. 
   - Automated tests to cover payment system and image pipelines.
+  - Automated tasks to remove all photos taken within 24-hours for security and privacy of the customers.
 
 ---
 ## Contact

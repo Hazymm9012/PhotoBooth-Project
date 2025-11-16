@@ -24,7 +24,8 @@ class Config:
     OPENAI_API_KEY = os.getenv('OPENAI_API_KEY') 
     
     # Allowed IPs to access the app (Configure IP Address based on location)
-    ALLOWED_IPS = ['202.168.65.122', '127.0.0.1']
+    # Edit this list to add/remove allowed IPs
+    ALLOWED_IPS = ['127.0.0.1']
 
     # Constants and global variables
     ORIGINAL_PHOTO_DIR = 'full_original_photos'
