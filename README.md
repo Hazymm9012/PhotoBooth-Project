@@ -155,7 +155,7 @@ cp .env.example .env
 ### Step 2: Fill the values in `.env` with your own values
 ```bash
 # Example environment configuration file for the Flask web application.
-BASE_URL=your_main_app_url_here
+BASE_URL=your_main_app_url_here     #To use payment system, please use custom domain here. Not localhost
 
 # API keys and secrets
 HITPAY_API_KEY=your_hitpay_api_key_here
@@ -180,6 +180,27 @@ FLASK_ENV=production
     
 > **Notes:** These keys are not included for security purposes. Please provide your own API keys.
 
+---
+## Launching the App
+### Step 1: Deploy the app
+```bash
+conda activate base
+
+flask run
+#OR
+flask run --port=PORT_NUMBER
+```
+>  Note: Replace `PORT_NUMBER` with your preferred port number. Example: 8080, 8000
+
+### Step 5: Visit the web app
+Visit the web url link provided in the terminal. 
+```bash
+For Example:
+http://127.0.0.1:PORT_NUMBER
+#OR
+https://CUSTOM_DOMAIN_URL
+```
+> Note: CUSTOM_DOMAIN_URL is used for custom domain. To access or use payment system, custom domain must be used to test it. For exploring the app, custom domain is not required.
 ---
 ## How It Works (High Level)
 
