@@ -227,6 +227,7 @@ FLASK_ENV=production
 - Any incomplete tasks while using the app will automatically delete taken photos or images generated for security purpose.
 - The app is designed specifically for kiosk with big screen.
 - Server's IP Address needs to be whitelisted to deploy the app.
+- Hitpay requires real domain URL for the use of webhook and signature verification. For testing purpose, `NGROK` is used to obtain temporary real domain URL.
 
 ---
 ## Limitations & Future Improvements
